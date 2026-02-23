@@ -41,4 +41,4 @@ These can be attached to either:
 - An **IAM user** for local development (`aws iam create-access-key`)
 - An **IAM role** assumed via SSO/federation for team use
 
-For a quick demo, a single IAM user with policy 4 attached works. For production, use separate roles with session-based credentials.
+For a quick demo, a single IAM user with policies 2 and 3 attached works. For production, use separate roles with session-based credentials.
