@@ -67,7 +67,7 @@ flowchart LR
 
 - Deploy order matters: control-plane first, infra second.
 - Nodes are in private subnets; use AWS Session Manager for access — no SSH exposed.
-- ALB serves HTTPS (TLS 1.2/1.3) with host-based routing per tenant.
+- ALB serves HTTPS (TLS 1.2/1.3); host-based routing per tenant is handled by Traefik on the nodes.
 - Observability is managed as code in Terraform (dashboards, logs, access logs, metric filters).
 
 ## Cleanup
