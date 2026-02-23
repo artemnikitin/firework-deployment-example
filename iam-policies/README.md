@@ -10,13 +10,11 @@ Minimal IAM policies for each component. Replace the placeholder values before u
 
 ## Policies
 
-| # | File | Used by | Notes |
-|---|---|---|---|
-| 1 | `01-ci-images-s3.json` | GitHub Actions CI (`firework-gitops-example`) | Read/write rootfs images to S3. Create an IAM user, attach this policy, and set `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` as repo secrets. |
-| 2 | `02-agent-s3-readonly.json` | EC2 instance profile (agent) | Read-only access to both S3 buckets. Already created by `terraform/infra` — this file is for reference. |
-| 3 | `03-enricher-lambda.json` | Lambda execution role (enricher) | Write configs to S3 + CloudWatch Logs. Already created by `terraform/control-plane` — this file is for reference. |
-| 4 | `04-terraform-deploy.json` | Terraform operator | Full deploy permissions: VPC, EC2, Auto Scaling, ALB, ACM, Route53, S3, Lambda, API Gateway, IAM, SSM, CloudWatch. Includes CloudWatch Log Delivery APIs needed for API Gateway access logs (`logs:CreateLogDelivery`, etc.) and S3 permissions for ALB access-log buckets (`*-alb-logs-*`). **Replace `ACCOUNT_ID`, `IMAGES_BUCKET_NAME`, and `CONFIGS_BUCKET_NAME` before applying.** |
-| 5 | `05-packer-build.json` | Packer operator | Build AMIs (launch instances, create snapshots/images, manage temp security groups). |
+| # | File                       | Used by | Notes |
+|---|----------------------------|---|---|
+| 1 | `01-ci-images-s3.json`     | GitHub Actions CI (`firework-gitops-example`) | Read/write rootfs images to S3. Create an IAM user, attach this policy, and set `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` as repo secrets. |
+| 2 | `02-terraform-deploy.json` | Terraform operator | Full deploy permissions: VPC, EC2, Auto Scaling, ALB, ACM, Route53, S3, Lambda, API Gateway, IAM, SSM, CloudWatch. Includes CloudWatch Log Delivery APIs needed for API Gateway access logs (`logs:CreateLogDelivery`, etc.) and S3 permissions for ALB access-log buckets (`*-alb-logs-*`). **Replace `ACCOUNT_ID`, `IMAGES_BUCKET_NAME`, and `CONFIGS_BUCKET_NAME` before applying.** |
+| 3 | `03-packer-build.json`     | Packer operator | Build AMIs (launch instances, create snapshots/images, manage temp security groups). |
 
 ## Usage
 
@@ -37,14 +35,10 @@ aws iam attach-user-policy \
 aws iam create-access-key --user-name firework-ci-images
 ```
 
-### Policies 2 and 3 are informational
-
-The agent instance profile (policy 2) and enricher Lambda role (policy 3) are created automatically by Terraform. These JSON files document what permissions are granted, which is useful for security reviews and audits.
-
-### Terraform and Packer (policies 4 and 5)
+### Terraform and Packer (policies 2 and 3)
 
 These can be attached to either:
 - An **IAM user** for local development (`aws iam create-access-key`)
 - An **IAM role** assumed via SSO/federation for team use
 
-For a quick demo, a single IAM user with policy 4 attached works. For production, use separate roles with session-based credentials.
+For a quick demo, a single IAM user with policies 2 and 3 attached works. For production, use separate roles with session-based credentials.

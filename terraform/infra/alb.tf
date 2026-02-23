@@ -26,12 +26,9 @@ resource "aws_lb" "main" {
 #
 # NOTE — multi-node routing limitation:
 # This target group includes ALL nodes. ALB picks a node round-robin, but each
-# node's Traefik only knows routes for services scheduled there. A request sent
-# to the wrong node returns 404/502.
+# node's Traefik only knows routes for services scheduled there.
 #
-# This design is correct for single-node deployments (the current default).
-# For multi-node deployments (node_count > 1 with anti-affinity), the full fix
-# requires one target group per node and ALB listener rules mapping each tenant
+# The full fix requires one target group per node and ALB listener rules mapping each tenant
 # hostname to the node where that tenant's services are scheduled. That in turn
 # requires the enricher to manage ALB rules dynamically after scheduling — a
 # larger architectural change tracked separately.
