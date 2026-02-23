@@ -1,19 +1,19 @@
 # Infra Terraform Stack
 
-This stack provisions the runtime environment where Firework nodes run.
+This stack provisions the data plane with Firework.
 
 It creates:
 
 - VPC with public/private subnets across two AZs
 - NAT gateways for outbound traffic from private subnets
-- ALB (HTTPS) forwarding to Kibana instances
+- ALB (HTTPS) forwarding to Traefik on Firework nodes
 - Node security groups and IAM role
 - Launch template + Auto Scaling Group for Firework nodes
 
 This stack depends on:
 
-- AMI from `packer/README.md`
-- Config bucket outputs from `terraform/control-plane`
+- AMI from [packer/README.md](../../packer/README.md)
+- Config bucket outputs from [terraform/control-plane/README.md](../../terraform/control-plane/README.md)
 - Existing images bucket managed outside this stack
 
 ## Prerequisites
@@ -27,24 +27,12 @@ This stack depends on:
 ## Deploy
 
 ```bash
-cd terraform/infra
 cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with AMI and bucket values
+# Edit terraform.tfvars
 terraform init
 terraform plan
 terraform apply
 ```
-
-## Required Inputs
-
-| Variable | Source |
-|---|---|
-| `node_ami_id` | AMI built in `packer/` |
-| `s3_configs_bucket_id` | `terraform/control-plane` output `config_bucket_name` |
-| `s3_configs_bucket_arn` | `terraform/control-plane` output `config_bucket_arn` |
-| `s3_images_bucket_id` | Existing bucket managed outside this stack |
-| `s3_images_bucket_arn` | Existing bucket managed outside this stack |
-| `node_key_name` | Existing EC2 key pair in target region |
 
 ## Observability
 
@@ -54,34 +42,6 @@ This stack now provisions basic runtime observability:
 - CloudWatch log groups for `firework-agent` and Firecracker VM logs
 - ALB access logs in an S3 bucket
 - CloudWatch metric filters for common `firework-agent` error patterns
-
-Useful outputs:
-
-```bash
-terraform output -raw observability_dashboard_name
-terraform output -raw node_agent_log_group_name
-terraform output -raw node_firecracker_log_group_name
-terraform output -raw alb_access_logs_bucket_name
-```
-
-Quick checks:
-
-```bash
-DASHBOARD=$(terraform output -raw observability_dashboard_name)
-AGENT_LOG_GROUP=$(terraform output -raw node_agent_log_group_name)
-FC_LOG_GROUP=$(terraform output -raw node_firecracker_log_group_name)
-ALB_LOG_BUCKET=$(terraform output -raw alb_access_logs_bucket_name)
-
-# Stream node-level logs
-aws logs tail "$AGENT_LOG_GROUP" --since 30m --follow
-aws logs tail "$FC_LOG_GROUP" --since 30m --follow
-
-# Confirm ALB access logs are being delivered
-aws s3 ls "s3://$ALB_LOG_BUCKET/alb/AWSLogs/" --recursive
-
-# Dashboard exists
-aws cloudwatch get-dashboard --dashboard-name "$DASHBOARD" --query 'DashboardName' --output text
-```
 
 ## Debugging
 
@@ -163,7 +123,7 @@ Run this outside the node (from your workstation) to see what the ALB sees:
 
 ```bash
 # List target groups
-aws elbv2 describe-target-groups --query 'TargetGroups[?contains(TargetGroupName,`kbn`)].{Name:TargetGroupName,Arn:TargetGroupArn}' --output table
+aws elbv2 describe-target-groups --query 'TargetGroups[?contains(TargetGroupName,`trafk`)].{Name:TargetGroupName,Arn:TargetGroupArn}' --output table
 
 # Check health of a specific target group
 aws elbv2 describe-target-health --target-group-arn <arn>
@@ -174,7 +134,6 @@ aws elbv2 describe-target-health --target-group-arn <arn>
 From `firework-deployment-example/`, deploy a local binary to an existing node via SCP tunneled over SSM:
 
 ```bash
-AWS_SHARED_CREDENTIALS_FILE=~/.aws/credentials-personal \
 ./scripts/push-agent-to-node.sh \
   --instance-id <instance-id> \
   --agent-path ../firework/bin/firework-agent-linux-arm64 \
@@ -183,23 +142,17 @@ AWS_SHARED_CREDENTIALS_FILE=~/.aws/credentials-personal \
 ```
 
 Notes:
-- Script no longer uses S3. It always copies directly via `scp/ssh` through Session Manager.
 - Requires SSH over SSM (`AWS-StartSSHSession`) and a valid node key pair.
 
 ## Multi-node routing limitation
 
 The ALB uses a single target group containing all nodes. Traefik on each node
-only has routes for services scheduled to that node. In a multi-node deployment
-(`node_count > 1` with anti-affinity), the ALB may forward a request to a node
-that doesn't host the target service, causing 404/502 responses.
-
-**For single-node deployments this is not a problem** (the default).
+only has routes for services scheduled to that node. 
 
 The complete fix requires one ALB target group per node and listener rules that
 map each tenant hostname to the node where that service is scheduled. This
 means the enricher must call ALB APIs after each scheduling cycle to update
-rules — a larger architectural change not implemented here. See the comment in
-`alb.tf` for details.
+rules. This is a larger architectural change and it's not implemented yet. 
 
 ## Destroy
 
