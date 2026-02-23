@@ -1,0 +1,38 @@
+# Copy this file to terraform.tfvars and fill in the values.
+
+aws_region   = "us-east-1"
+project_name = "firework-example"
+
+# Root domain for DNS records and the wildcard ACM certificate.
+# A Route53 hosted zone for this domain must already exist in your account.
+domain_name = "example.com"
+
+# Availability zones — update if deploying to a different region.
+# availability_zones = ["us-east-1a", "us-east-1c"]
+
+# These values come from the control-plane stack outputs:
+#   cd ../control-plane && terraform output
+s3_configs_bucket_id  = "firework-example-configs-xxxx"
+s3_configs_bucket_arn = "arn:aws:s3:::firework-example-configs-xxxx"
+
+# Pre-existing images bucket managed by CI (not created by Terraform).
+# Create once: aws s3 mb s3://<name> --region us-east-1
+s3_images_bucket_id  = "your-images-bucket-name"
+s3_images_bucket_arn = "arn:aws:s3:::your-images-bucket-name"
+
+# AMI built by Packer (see packer/ directory).
+# Run: cd packer && packer build firework-node.pkr.hcl
+# Then paste the AMI ID here.
+node_ami_id   = "ami-0123456789abcdef0"
+node_key_name = "my-key-pair"
+
+# Instance type must support bare-metal / KVM for Firecracker.
+# c6g.metal = ARM Graviton2, 64 vCPUs, 128 GB RAM.
+node_instance_type = "c6g.metal"
+
+# Number of Firecracker nodes.
+node_count = 2
+
+# Guest networking (defaults match the agent's built-in defaults).
+# vm_subnet  = "172.16.0.0/24"
+# vm_gateway = "172.16.0.1"

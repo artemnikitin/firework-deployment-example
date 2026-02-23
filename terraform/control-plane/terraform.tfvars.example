@@ -1,0 +1,40 @@
+# Copy this file to terraform.tfvars and fill in the values.
+
+aws_region   = "us-east-1"
+project_name = "firework-demo"
+
+# HTTPS clone URL of the GitOps config repo.
+# Used by the EventBridge-triggered periodic re-sync (every 5 minutes).
+config_repo_url = "https://github.com/your-org/your-config-repo"
+
+# Git branch the enricher processes.
+config_repo_branch = "main"
+
+# GitHub personal access token for cloning the config repo.
+# Required when the config repo is private. Needs at least read:contents scope.
+github_token = "ghp_..."
+
+# GitHub webhook secret used to validate incoming payloads (optional but recommended).
+# Must match the secret set in the GitHub webhook settings.
+github_webhook_secret = "your-secret-here"
+
+# CloudWatch namespace used by the scheduler Lambda to discover node capacity.
+# Must match the agent_metric_namespace output from the infra stack.
+# (e.g. run: terraform -chdir=../infra output agent_metric_namespace)
+cw_namespace = "FireworkDemo"
+
+# Enricher binary source — choose one of:
+#   a) Download from GitHub releases (default — leave both commented out):
+#      enricher_version = "latest"   # or a specific version e.g. "1.2.0"
+#
+#   b) Use a locally built binary:
+#      enricher_zip_path = "../../firework/bin/enricher.zip"
+#      (build with: cd firework && make package-enricher)
+
+# Scheduler binary source — choose one of:
+#   a) Download from GitHub releases (default — leave both commented out):
+#      scheduler_version = "latest"   # or a specific version e.g. "1.2.0"
+#
+#   b) Use a locally built binary:
+#      scheduler_zip_path = "../../firework/bin/scheduler.zip"
+#      (build with: cd firework && make package-scheduler)

@@ -1,0 +1,29 @@
+# Trivy ignore rules for the infra stack.
+# These findings are intentional for a demo/example deployment.
+
+# ALB is intentionally public-facing.
+AWS-0053
+
+# ALB listener uses HTTP — no ACM certificate is provisioned in this example.
+AWS-0054
+
+# Security groups allow unrestricted egress — standard for example deployments.
+AWS-0104
+
+# SSH open to 0.0.0.0/0 — expected for developer access in a demo.
+AWS-0107
+
+# Public subnets assign public IPs — that's what public subnets do.
+AWS-0164
+
+# S3 uses AES256 (SSE-S3) instead of CMK — acceptable for demo.
+AWS-0132
+
+# VPC Flow Logs not enabled — acceptable for demo.
+AWS-0178
+
+# CloudWatch log groups not encrypted with CMK — acceptable for demo.
+AWS-0017
+
+# S3 bucket logging not enabled — acceptable for demo.
+AWS-0089

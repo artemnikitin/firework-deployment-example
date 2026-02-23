@@ -1,0 +1,23 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ListImagesBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket"
+      ],
+      "Resource": "arn:aws:s3:::IMAGES_BUCKET_NAME"
+    },
+    {
+      "Sid": "ReadWriteImages",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:HeadObject",
+        "s3:PutObject"
+      ],
+      "Resource": "arn:aws:s3:::IMAGES_BUCKET_NAME/*"
+    }
+  ]
+}

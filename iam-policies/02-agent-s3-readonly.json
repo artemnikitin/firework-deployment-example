@@ -1,0 +1,39 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ListConfigsBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket"
+      ],
+      "Resource": "arn:aws:s3:::CONFIGS_BUCKET_NAME"
+    },
+    {
+      "Sid": "ReadConfigs",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:HeadObject"
+      ],
+      "Resource": "arn:aws:s3:::CONFIGS_BUCKET_NAME/nodes/*"
+    },
+    {
+      "Sid": "ListImagesBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket"
+      ],
+      "Resource": "arn:aws:s3:::IMAGES_BUCKET_NAME"
+    },
+    {
+      "Sid": "ReadImages",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:HeadObject"
+      ],
+      "Resource": "arn:aws:s3:::IMAGES_BUCKET_NAME/*"
+    }
+  ]
+}
