@@ -1,4 +1,4 @@
-# Trivy ignore rules for the infra stack.
+# Trivy ignore rules for the data-plane stack.
 # These findings are intentional for a demo/example deployment.
 
 # ALB is intentionally public-facing.

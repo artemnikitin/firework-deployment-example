@@ -6,9 +6,13 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
-    null = {
-      source  = "hashicorp/null"
+    random = {
+      source  = "hashicorp/random"
       version = "~> 3.0"
+    }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
     }
   }
 }
@@ -20,7 +24,7 @@ provider "aws" {
     tags = {
       Project   = var.project_name
       ManagedBy = "terraform"
-      Component = "enricher"
+      Component = "control-plane"
     }
   }
 }

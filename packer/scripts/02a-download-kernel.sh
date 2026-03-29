@@ -25,7 +25,7 @@ fi
 KERNEL_FILENAME=$(basename "${KERNEL_KEY}")
 KERNEL_URL="https://s3.amazonaws.com/spec.ccfc.min/${KERNEL_KEY}"
 
-# Save with the canonical two-part name (e.g. vmlinux-5.10) so the enricher
+# Save with the canonical two-part name (e.g. vmlinux-5.10) so the control-plane
 # default kernel path (/var/lib/images/vmlinux-5.10) resolves without a symlink.
 KERNEL_MAJOR_MINOR=$(echo "${KERNEL_FILENAME}" | grep -oE "vmlinux-[0-9]+\.[0-9]+")
 KERNEL_PATH="${IMAGES_DIR}/${KERNEL_MAJOR_MINOR}"

@@ -20,9 +20,40 @@ This stack depends on:
 
 - [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.5
 - AWS credentials with permissions for VPC, EC2, ALB, IAM
-- Control-plane stack already applied (`config_bucket_name`, `config_bucket_arn`)
+- Control-plane stack already applied
+- By default, this stack auto-wires config/registry/step-ca values from `../control-plane/terraform.tfstate`
+  (`use_control_plane_remote_state = true`, `control_plane_state_path = "../control-plane/terraform.tfstate"`)
+  - If your control-plane state lives elsewhere, point `control_plane_state_path` to it or disable auto-wiring and set manual overrides.
 - Existing S3 images bucket and ARN
 - Firework node AMI ID (built by Packer)
+
+Apply order is strict: deploy `terraform/control-plane` first, then `terraform/data-plane`.
+
+## Minimal Input (quick start)
+
+With control-plane auto-wiring enabled, the minimum required `terraform.tfvars` values are:
+
+- `domain_name`
+- `s3_images_bucket_id`
+- `s3_images_bucket_arn`
+- `node_ami_id`
+- `node_key_name`
+
+## Node certificate bootstrap modes
+
+Two certificate bootstrap modes are supported for registry mTLS:
+
+- Preferred: `step-ca` AWS IID mode
+  - Auto-wired from control-plane outputs when available (`step_ca_url`, `step_ca_root_ca_secret_arn`, `step_ca_provisioner_name`)
+  - You can still override with explicit tfvars values
+  - Node obtains cert/key using `step ca certificate --provisioner <aws-iid>`
+  - Node runs `step ca renew --daemon` for automatic renewal
+  - Node does **not** need `registry_bootstrap_token_secret_arn`
+  - Ensure the registry service trusts the same CA root before enabling this mode
+- Legacy: registry enrollment token mode
+  - Auto-wired from control-plane outputs when available (`registry_client_ca_secret_arn`, `registry_bootstrap_token_secret_arn`)
+  - You can still override with explicit tfvars values
+  - Agent enrolls directly with the registry endpoint
 
 ## Deploy
 
@@ -42,6 +73,7 @@ This stack now provisions basic runtime observability:
 - CloudWatch log groups for `firework-agent` and Firecracker VM logs
 - ALB access logs in an S3 bucket
 - CloudWatch metric filters for common `firework-agent` error patterns
+- CloudWatch metric filters for controller errors that read `/ecs/<project>/controlplane-controller` (created by the control-plane stack)
 
 ## Debugging
 
@@ -82,7 +114,7 @@ Key things to look for in logs:
 ### Check agent config and images
 
 ```bash
-# Confirm agent config looks correct (node_names, s3_bucket, etc.)
+# Confirm agent config looks correct (node_names, s3_bucket/s3_prefix, registry_url)
 cat /etc/firework/agent.yaml
 
 # Confirm all expected rootfs images are downloaded
@@ -151,8 +183,8 @@ only has routes for services scheduled to that node.
 
 The complete fix requires one ALB target group per node and listener rules that
 map each tenant hostname to the node where that service is scheduled. This
-means the enricher must call ALB APIs after each scheduling cycle to update
-rules. This is a larger architectural change and it's not implemented yet. 
+means the control-plane controller must call ALB APIs after each scheduling cycle
+to update rules. This is a larger architectural change and it's not implemented yet.
 
 ## Destroy
 

@@ -1,6 +1,8 @@
 # Firework Deployment Example
 
-Reference deployment of [Firework](https://github.com/artemnikitin/firework) on AWS using Packer (for building AMI) + Terraform.
+> **Not production-ready.** This is an example deployment intended for demonstration and learning purposes only. It is not hardened, audited, etc.
+
+Example deployment of [Firework](https://github.com/artemnikitin/firework) on AWS using Packer (for building AMI) + Terraform.
 
 ## Related repositories
 
@@ -11,18 +13,19 @@ Reference deployment of [Firework](https://github.com/artemnikitin/firework) on 
 
 ```mermaid
 flowchart LR
-  GitHub["GitHub (config repo)"] -->|push webhook| APIGW["API Gateway /webhook"]
+  GitHub["GitHub (config repo)"] -->|push webhook| EventsALB["Events ALB :443"]
   CI["CI pipeline"] -->|build + upload rootfs| S3Images["S3 images bucket"]
 
   subgraph VPC["AWS VPC"]
     direction LR
 
-    subgraph ControlPlane["Control plane"]
-      APIGW --> Enricher["Enricher Lambda"]
-      Enricher -->|invoke| Scheduler["Scheduler Lambda"]
-      Scheduler -->|placement| Enricher
-      Enricher -->|write node configs| S3Configs["S3 configs bucket"]
-      CloudWatch["CloudWatch metrics"] --> Scheduler
+    subgraph ControlPlane["Control plane (ECS/Fargate, role-separated)"]
+      EventsALB --> Events["events service"]
+      Events --> S3Configs["S3 configs/state bucket"]
+      RegistryNLB["Registry NLB :9443"] --> Registry["registry service"]
+      StepCANLB["step-ca NLB :9000 (optional)"] --> StepCA["step-ca service"]
+      Registry --> S3Configs
+      Controller["controller service"] --> S3Configs
     end
 
     subgraph Public["Public subnets"]
@@ -44,7 +47,8 @@ flowchart LR
 
     S3Configs -->|poll configs| Node
     S3Images -->|download rootfs| Node
-    Node -->|publish capacity| CloudWatch
+    Node -->|AWS IID cert bootstrap (optional)| StepCANLB
+    Node -->|mTLS enroll/register/heartbeat| RegistryNLB
     ALB -->|tenant traffic| Node
   end
 ```
@@ -53,21 +57,22 @@ flowchart LR
 
 0. Make sure that you are using an AWS account with correct permissions to deploy all the resources. See `iam-policies` folder for more details.
 1. Build AMI for EC2 instance(s) with Packer.
-2. Deploy control-plane stack (creates webhook, Lambdas, config bucket).
-3. Deploy infra and data-plane (creates network, EC2 instances, ALB, etc).
+2. Deploy control-plane stack (creates ECS services for `events`/`registry`/`controller` + config bucket).
+3. Deploy data-plane stack (creates network, EC2 instances, ALB, etc).
 4. Push configs/images and let the agent reconcile microVMs.
 
 ## Detailed Guides
 
 - Packer AMI build: [packer/README.md](packer/README.md)
 - Control plane Terraform stack: [terraform/control-plane/README.md](terraform/control-plane/README.md)
-- Infra and data plane Terraform stack: [terraform/infra/README.md](terraform/infra/README.md)
+- Data-plane Terraform stack: [terraform/data-plane/README.md](terraform/data-plane/README.md)
 
 ## Key Notes
 
-- Deploy order matters: control-plane first, infra second.
+- Deploy order matters: control-plane first, data-plane second.
 - Nodes are in private subnets; use AWS Session Manager for access — no SSH exposed.
 - ALB serves HTTPS (TLS 1.2/1.3); host-based routing per tenant is handled by Traefik on the nodes.
+- Optional step-ca service can issue short-lived node certs via AWS IID instead of static bootstrap tokens.
 - Observability is managed as code in Terraform (dashboards, logs, access logs, metric filters).
 
 ## Cleanup
@@ -75,6 +80,6 @@ flowchart LR
 Destroy in reverse order:
 
 ```bash
-cd terraform/infra && terraform destroy
+cd terraform/data-plane && terraform destroy
 cd ../control-plane && terraform destroy
 ```

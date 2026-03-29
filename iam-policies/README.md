@@ -4,8 +4,7 @@ Minimal IAM policies for each component. Replace the placeholder values before u
 
 | Placeholder | Replace with |
 |---|---|
-| `IMAGES_BUCKET_NAME` | S3 images bucket name (from `terraform/infra` output: `images_bucket_name`) |
-| `CONFIGS_BUCKET_NAME` | S3 configs bucket name (from `terraform/control-plane` output: `config_bucket_name`) |
+| `IMAGES_BUCKET_NAME` | S3 images bucket name (from `terraform/data-plane` output: `images_bucket_name`) |
 | `ACCOUNT_ID` | Your AWS account ID |
 
 ## Policies
@@ -13,7 +12,7 @@ Minimal IAM policies for each component. Replace the placeholder values before u
 | # | File                       | Used by | Notes |
 |---|----------------------------|---|---|
 | 1 | `01-ci-images-s3.json`     | GitHub Actions CI (`firework-gitops-example`) | Read/write rootfs images to S3. Create an IAM user, attach this policy, and set `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` as repo secrets. |
-| 2 | `02-terraform-deploy.json` | Terraform operator | Full deploy permissions: VPC, EC2, Auto Scaling, ALB, ACM, Route53, S3, Lambda, API Gateway, IAM, SSM, CloudWatch. Includes CloudWatch Log Delivery APIs needed for API Gateway access logs (`logs:CreateLogDelivery`, etc.) and S3 permissions for ALB access-log buckets (`*-alb-logs-*`). **Replace `ACCOUNT_ID`, `IMAGES_BUCKET_NAME`, and `CONFIGS_BUCKET_NAME` before applying.** |
+| 2 | `02-terraform-deploy.json` | Terraform operator | Full deploy permissions: VPC, EC2, Auto Scaling, ALB/NLB, ACM, Route53, S3, ECS/Fargate, EFS, Secrets Manager, IAM, SSM, CloudWatch. Includes CloudWatch Log Delivery APIs and S3 permissions for ALB access-log buckets (`*-alb-logs-*`). **Replace `ACCOUNT_ID` before applying.** |
 | 3 | `03-packer-build.json`     | Packer operator | Build AMIs (launch instances, create snapshots/images, manage temp security groups). |
 
 ## Usage

@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# S3 bucket — configs (enricher writes enriched node YAML, agent reads)
+# S3 bucket — control-plane state and rendered node configs
 # -----------------------------------------------------------------------------
 
 resource "aws_s3_bucket" "configs" {

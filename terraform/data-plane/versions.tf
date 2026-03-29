@@ -16,7 +16,7 @@ provider "aws" {
     tags = {
       Project   = var.project_name
       ManagedBy = "terraform"
-      Component = "infra"
+      Component = "data-plane"
     }
   }
 }

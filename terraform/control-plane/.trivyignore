@@ -1,6 +1,6 @@
-# Trivy ignore rules for the enricher stack.
+# Trivy ignore rules for the control-plane ECS stack.
 
-# Lambda X-Ray tracing not enabled — acceptable for demo.
+# X-Ray tracing not enabled — acceptable for demo.
 AWS-0066
 
 # CloudWatch log groups not encrypted with CMK — acceptable for demo.

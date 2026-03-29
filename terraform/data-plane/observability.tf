@@ -9,10 +9,12 @@ locals {
   node_firecracker_log_group_name = "/firework/${var.project_name}/node/firecracker"
   agent_metric_namespace          = "Firework/${var.project_name}"
   alb_access_logs_prefix          = "alb"
-  enricher_function_name          = "${var.project_name}-enricher"
-  scheduler_function_name         = "${var.project_name}-scheduler"
-  # Scheduler log group is created by the control-plane stack; derived here by name convention.
-  scheduler_log_group_name = "/aws/lambda/${var.project_name}-scheduler"
+  controlplane_cluster_name       = "${var.project_name}-controlplane"
+  events_service_name             = "${var.project_name}-controlplane-events"
+  registry_service_name           = "${var.project_name}-controlplane-registry"
+  controller_service_name         = "${var.project_name}-controlplane-controller"
+  # Controller log group is created by the control-plane stack; derived here by name convention.
+  controller_log_group_name = "/ecs/${var.project_name}/controlplane-controller"
 }
 
 resource "aws_cloudwatch_log_group" "node_agent" {
@@ -72,37 +74,37 @@ resource "aws_cloudwatch_log_metric_filter" "health_check_failed" {
   }
 }
 
-resource "aws_cloudwatch_log_metric_filter" "scheduler_no_nodes_discovered" {
-  name           = "${var.project_name}-scheduler-no-nodes-discovered"
-  log_group_name = local.scheduler_log_group_name
-  pattern        = "\"no active nodes discovered\""
+resource "aws_cloudwatch_log_metric_filter" "controller_no_nodes_discovered" {
+  name           = "${var.project_name}-controller-no-nodes-discovered"
+  log_group_name = local.controller_log_group_name
+  pattern        = "\"no active nodes available for scheduling\""
 
   metric_transformation {
-    name      = "SchedulerNoNodesDiscovered"
+    name      = "ControllerNoNodesDiscovered"
     namespace = local.agent_metric_namespace
     value     = "1"
   }
 }
 
-resource "aws_cloudwatch_log_metric_filter" "scheduler_insufficient_capacity" {
-  name           = "${var.project_name}-scheduler-insufficient-capacity"
-  log_group_name = local.scheduler_log_group_name
+resource "aws_cloudwatch_log_metric_filter" "controller_insufficient_capacity" {
+  name           = "${var.project_name}-controller-insufficient-capacity"
+  log_group_name = local.controller_log_group_name
   pattern        = "\"no node has sufficient capacity\""
 
   metric_transformation {
-    name      = "SchedulerInsufficientCapacity"
+    name      = "ControllerInsufficientCapacity"
     namespace = local.agent_metric_namespace
     value     = "1"
   }
 }
 
-resource "aws_cloudwatch_log_metric_filter" "scheduler_placement_read_failed" {
-  name           = "${var.project_name}-scheduler-placement-read-failed"
-  log_group_name = local.scheduler_log_group_name
-  pattern        = "\"failed to read existing placement\""
+resource "aws_cloudwatch_log_metric_filter" "controller_placement_read_failed" {
+  name           = "${var.project_name}-controller-placement-read-failed"
+  log_group_name = local.controller_log_group_name
+  pattern        = "\"reading existing placement failed\""
 
   metric_transformation {
-    name      = "SchedulerPlacementReadFailed"
+    name      = "ControllerPlacementReadFailed"
     namespace = local.agent_metric_namespace
     value     = "1"
   }
@@ -265,14 +267,13 @@ resource "aws_cloudwatch_dashboard" "observability" {
         width  = 12
         height = 6
         properties = {
-          title  = "Enricher Lambda"
+          title  = "Control Plane ECS Services"
           region = var.aws_region
           view   = "timeSeries"
           metrics = [
-            ["AWS/Lambda", "Errors", "FunctionName", local.enricher_function_name, { stat = "Sum", label = "errors" }],
-            ["AWS/Lambda", "Throttles", "FunctionName", local.enricher_function_name, { stat = "Sum", label = "throttles" }],
-            ["AWS/Lambda", "Duration", "FunctionName", local.enricher_function_name, { stat = "Average", label = "duration avg" }],
-            ["AWS/Lambda", "Invocations", "FunctionName", local.enricher_function_name, { stat = "Sum", label = "invocations" }]
+            ["AWS/ECS", "RunningTaskCount", "ClusterName", local.controlplane_cluster_name, "ServiceName", local.events_service_name, { stat = "Average", label = "events running" }],
+            ["AWS/ECS", "RunningTaskCount", "ClusterName", local.controlplane_cluster_name, "ServiceName", local.registry_service_name, { stat = "Average", label = "registry running" }],
+            ["AWS/ECS", "RunningTaskCount", "ClusterName", local.controlplane_cluster_name, "ServiceName", local.controller_service_name, { stat = "Average", label = "controller running" }]
           ]
         }
       },
@@ -283,14 +284,13 @@ resource "aws_cloudwatch_dashboard" "observability" {
         width  = 12
         height = 6
         properties = {
-          title  = "Scheduler Lambda"
+          title  = "Control Plane CPU Utilization"
           region = var.aws_region
           view   = "timeSeries"
           metrics = [
-            ["AWS/Lambda", "Errors", "FunctionName", local.scheduler_function_name, { stat = "Sum", label = "errors" }],
-            ["AWS/Lambda", "Throttles", "FunctionName", local.scheduler_function_name, { stat = "Sum", label = "throttles" }],
-            ["AWS/Lambda", "Duration", "FunctionName", local.scheduler_function_name, { stat = "Average", label = "duration avg" }],
-            ["AWS/Lambda", "Invocations", "FunctionName", local.scheduler_function_name, { stat = "Sum", label = "invocations" }]
+            ["AWS/ECS", "CPUUtilization", "ClusterName", local.controlplane_cluster_name, "ServiceName", local.events_service_name, { stat = "Average", label = "events cpu %" }],
+            ["AWS/ECS", "CPUUtilization", "ClusterName", local.controlplane_cluster_name, "ServiceName", local.registry_service_name, { stat = "Average", label = "registry cpu %" }],
+            ["AWS/ECS", "CPUUtilization", "ClusterName", local.controlplane_cluster_name, "ServiceName", local.controller_service_name, { stat = "Average", label = "controller cpu %" }]
           ]
         }
       },
@@ -301,14 +301,14 @@ resource "aws_cloudwatch_dashboard" "observability" {
         width  = 12
         height = 6
         properties = {
-          title  = "Scheduler Error Signals (Log-Derived)"
+          title  = "Controller Error Signals (Log-Derived)"
           region = var.aws_region
           view   = "timeSeries"
           stat   = "Sum"
           metrics = [
-            [local.agent_metric_namespace, "SchedulerNoNodesDiscovered", { label = "no nodes discovered" }],
-            [local.agent_metric_namespace, "SchedulerInsufficientCapacity", { label = "insufficient capacity" }],
-            [local.agent_metric_namespace, "SchedulerPlacementReadFailed", { label = "placement read failed" }]
+            [local.agent_metric_namespace, "ControllerNoNodesDiscovered", { label = "no active nodes" }],
+            [local.agent_metric_namespace, "ControllerInsufficientCapacity", { label = "insufficient capacity" }],
+            [local.agent_metric_namespace, "ControllerPlacementReadFailed", { label = "placement read failed" }]
           ]
         }
       },
@@ -319,10 +319,10 @@ resource "aws_cloudwatch_dashboard" "observability" {
         width  = 12
         height = 6
         properties = {
-          title  = "Scheduler — Recent Invocations"
+          title  = "Controller — Recent Reconciles"
           region = var.aws_region
           view   = "table"
-          query  = "SOURCE '${local.scheduler_log_group_name}' | fields @timestamp, services, nodes, node_configs | filter msg = \"scheduling complete\" | sort @timestamp desc | limit 20"
+          query  = "SOURCE '${local.controller_log_group_name}' | fields @timestamp, desired_revision, placement_revision, rendered_revision, services, nodes | filter msg = \"reconcile complete\" | sort @timestamp desc | limit 20"
         }
       }
     ]

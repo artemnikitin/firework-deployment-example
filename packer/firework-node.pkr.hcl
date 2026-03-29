@@ -19,7 +19,7 @@ variable "aws_region" {
 variable "instance_type" {
   type        = string
   default     = "t4g.large"
-  description = "Instance type for the Packer builder. Any ARM64 instance works — the build only installs binaries and does not run Firecracker. Metal instances are only required at runtime (infra stack). Avoid metal here: they take 15-20 min to launch/terminate."
+  description = "Instance type for the Packer builder. Any ARM64 instance works — the build only installs binaries and does not run Firecracker. Metal instances are only required at runtime (data-plane stack). Avoid metal here: they take 15-20 min to launch/terminate."
 }
 
 variable "source_ami_name" {

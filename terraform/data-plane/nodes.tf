@@ -39,16 +39,26 @@ resource "aws_launch_template" "node" {
   }
 
   user_data = base64encode(templatefile("${path.module}/templates/user-data.sh.tpl", {
-    s3_configs_bucket        = var.s3_configs_bucket_id
-    s3_images_bucket         = var.s3_images_bucket_id
-    s3_region                = var.aws_region
-    vm_subnet                = var.vm_subnet
-    vm_gateway               = var.vm_gateway
-    cw_agent_log_group_name  = aws_cloudwatch_log_group.node_agent.name
-    cw_firecracker_log_group = aws_cloudwatch_log_group.node_firecracker.name
-    cw_metric_namespace      = local.agent_metric_namespace
-    cw_prometheus_log_group  = aws_cloudwatch_log_group.node_prometheus.name
-    traefik_config_dir       = "/etc/traefik/dynamic"
+    s3_configs_bucket                   = local.effective_s3_configs_bucket_id
+    s3_configs_prefix                   = local.effective_s3_configs_prefix
+    s3_images_bucket                    = var.s3_images_bucket_id
+    s3_region                           = var.aws_region
+    registry_url                        = local.effective_registry_url
+    registry_server_name                = local.effective_registry_server_name
+    step_ca_url                         = local.effective_step_ca_url
+    step_ca_root_ca_secret_arn          = local.effective_step_ca_root_ca_secret_arn
+    step_ca_provisioner                 = local.effective_step_ca_provisioner
+    step_ca_subject_suffix              = var.step_ca_subject_suffix
+    step_ca_renew_expires_in            = var.step_ca_renew_expires_in
+    registry_client_ca_secret_arn       = local.effective_registry_client_ca_secret_arn
+    registry_bootstrap_token_secret_arn = local.effective_registry_bootstrap_token_secret_arn
+    vm_subnet                           = var.vm_subnet
+    vm_gateway                          = var.vm_gateway
+    cw_agent_log_group_name             = aws_cloudwatch_log_group.node_agent.name
+    cw_firecracker_log_group            = aws_cloudwatch_log_group.node_firecracker.name
+    cw_metric_namespace                 = local.agent_metric_namespace
+    cw_prometheus_log_group             = aws_cloudwatch_log_group.node_prometheus.name
+    traefik_config_dir                  = "/etc/traefik/dynamic"
   }))
 
   tag_specifications {

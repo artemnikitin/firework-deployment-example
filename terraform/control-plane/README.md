@@ -1,101 +1,88 @@
-# Control Plane Terraform Stack
+# Control Plane Terraform Stack (ECS)
 
-This stack provisions the control-plane layer used by Firework — the components that decide
-_what_ runs _where_ and write per-node configs to S3 for the agents to consume.
+This stack provisions Firework control plane on ECS/Fargate with **separated roles**:
 
-It creates:
+- `events` service: GitHub webhook ingestion (`/v1/events/github`)
+- `registry` service: node enroll/register/heartbeat APIs (mTLS)
+- `controller` service: leader-elected scheduling/publish loop
+- shared S3 bucket for control-plane state and rendered `nodes/*.yaml`
 
-- S3 bucket for enriched node configs
-- Enricher Lambda — processes GitOps pushes, enriches service specs, writes to S3
-- Scheduler Lambda — bin-packs services across active EC2 nodes with anti-affinity support
-- API Gateway webhook endpoint (`POST /webhook`) — receives GitHub push events
-- IAM roles and policies for both Lambdas
-- CloudWatch log groups and observability dashboard
+## Architecture
 
-Deploy this stack before `terraform/infra`, because infra consumes its outputs.
+- `events` runs behind a public HTTPS ALB
+- `registry` runs behind a TCP NLB (set `registry_internal = true` for private-only exposure)
+- `controller` runs as internal ECS tasks with no load balancer
+- optional `step-ca` runs as a dedicated ECS service with an NLB endpoint and EFS-backed state
 
 ## Prerequisites
 
 - [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.5
-- AWS credentials with permissions to create Lambda, API Gateway, S3, IAM resources
-- Optional `github_token` for private Git config repositories
+- AWS permissions for VPC, ECS, ELB, IAM, S3, CloudWatch, Secrets Manager (plus ACM/Route53 when auto-creating the events certificate)
+- Either:
+  - existing ACM certificate ARN for events ALB listener (`events_acm_certificate_arn`), or
+  - `events_domain_name` so this stack can auto-create/validate an ACM cert in Route53
+- GHCR image for control plane (`controlplane_image`)
+- Optional: pre-created Secrets Manager ARNs for webhook/TLS/PKI values.
+  - If omitted, this stack auto-generates demo secrets when `auto_create_demo_secrets = true` (default).
+  - Optional GHCR pull credentials (`controlplane_image_pull_secret_arn`)
+  - Optional GitHub token for private config repos
+
+## Minimal Input (quick start)
+
+For a demo deployment, only these are required in `terraform.tfvars`:
+
+- `controlplane_image`
+- one of:
+  - `events_acm_certificate_arn`, or
+  - `events_domain_name` (plus optional `events_hosted_zone_name` override)
+
+Everything else can use defaults and auto-generated secrets.
 
 ## Deploy
 
 ```bash
 cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars
+# edit terraform.tfvars
 terraform init
 terraform plan
 terraform apply
 ```
 
-## Using A Local Build
+## Important Outputs
 
-Both Lambdas support deploying a locally built ZIP instead of downloading a GitHub release.
+- `events_webhook_url` - configure GitHub push webhook to this URL
+- `events_domain_name` - custom DNS name for events endpoint (when configured)
+- `generated_github_webhook_secret` - webhook secret value (use this in GitHub when auto-generated)
+- `registry_url` - set in node `agent.yaml` (`registry_url`)
+- `config_bucket_name` + `config_prefix` - set in data-plane stack for agent config polling
+- `step_ca_url` - set in data-plane stack (`step_ca_url`) when using AWS IID node cert bootstrap
+- `step_ca_provisioner_name` - pass to data-plane stack (`step_ca_provisioner`)
+- `step_ca_root_ca_secret_arn` - pass to data-plane stack (`step_ca_root_ca_secret_arn`)
 
-```bash
-# In the firework repo
-make package-enricher   # produces bin/enricher.zip
-make package-scheduler  # produces bin/scheduler.zip
+## Optional step-ca PKI service
 
-# Deploy with local ZIPs
-terraform apply \
-  -var 'enricher_zip_path=../../firework/bin/enricher.zip' \
-  -var 'scheduler_zip_path=../../firework/bin/scheduler.zip'
-```
+Set `enable_step_ca = true` to deploy a `smallstep/step-ca` ECS service.
 
-You can override just one and let the other download from GitHub:
+- `step-ca` state is persisted on EFS so CA data survives task restarts.
+- The step-ca bootstrap password is read from `step_ca_password_secret_arn` (or auto-generated when omitted and `auto_create_demo_secrets = true`).
+- The task bootstraps an AWS IID provisioner (`step_ca_aws_provisioner_name`), scoped to `step_ca_aws_account_ids` (or the current account by default).
+- Use `step_ca_internal = true` for private-only endpoint exposure when your node network can route to the control-plane VPC.
+- Keep `step_ca_desired_count = 1`; this setup is single-writer and does not support active-active replicas.
+- When `enable_step_ca = true`, legacy registry enrollment secrets (`registry_enrollment_ca_secret_arn`, `registry_enrollment_ca_key_secret_arn`, `registry_bootstrap_token_secret_arn`) are optional.
+- Registry service trust remains configured by `registry_client_ca_secret_arn`; switching registry mTLS trust to step-ca is a later migration step.
 
-```bash
-terraform apply -var 'enricher_zip_path=../../firework/bin/enricher.zip'
-```
+For node bootstrap in the data-plane stack:
 
-## Observability
-
-This stack provisions:
-
-- Lambda log groups (`/aws/lambda/<function-name>`) for both Lambdas
-- API Gateway access log group (`/aws/apigateway/<project>-webhook-access`)
-- CloudWatch dashboard for enricher Lambda, scheduler Lambda, and webhook API metrics
-- Log-derived custom metrics in namespaces `Firework/<project_name>/Enricher` and `Firework/<project_name>/Scheduler`
-
-## Validate Lambda Before Webhook Setup
-
-```bash
-FUNCTION=$(terraform output -raw enricher_function_name)
-BUCKET=$(terraform output -raw config_bucket_name)
-
-aws lambda invoke \
-  --function-name "$FUNCTION" \
-  --cli-binary-format raw-in-base64-out \
-  --log-type Tail \
-  --payload '{
-    "repository": {"clone_url": "https://github.com/YOUR_ORG/YOUR_CONFIG_REPO.git"},
-    "ref": "refs/heads/main"
-  }' \
-  /tmp/enricher-response.json \
-  --query 'LogResult' --output text | base64 -d
-
-cat /tmp/enricher-response.json
-```
-
-Expected result:
-
-- Lambda logs include `enrichment complete`
-- Response body is `null`
-- S3 contains `nodes/*.yaml`
-
-```bash
-aws s3 ls "s3://$BUCKET/" --recursive
-```
+- set `step_ca_url` to this stack's `step_ca_url`
+- set `step_ca_root_ca_secret_arn` to a secret containing the step-ca root certificate PEM
+- set `step_ca_provisioner` to `step_ca_provisioner_name`
 
 ## Configure GitHub Webhook
 
 1. In the config repo, open **Settings** -> **Webhooks** -> **Add webhook**
-2. Set **Payload URL** to `webhook_url` output
+2. Set **Payload URL** to `events_webhook_url`
 3. Set **Content type** to `application/json`
-4. If using `github_webhook_secret`, set the same value in webhook **Secret**
+4. Set webhook **Secret** to the same value used in `github_webhook_secret_secret_arn` (or use `generated_github_webhook_secret` output when auto-generated)
 5. Select **Just the push event**
 
 ## Destroy
