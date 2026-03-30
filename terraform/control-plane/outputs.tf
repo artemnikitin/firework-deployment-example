@@ -136,3 +136,15 @@ output "generated_github_webhook_secret" {
   value       = local.auto_generated_github_webhook_secret
   sensitive   = true
 }
+
+output "generated_registry_bootstrap_token" {
+  description = "Auto-generated registry bootstrap token value (empty when an external secret ARN was provided or legacy enrollment is disabled)"
+  value       = local.auto_generated_registry_bootstrap_token
+  sensitive   = true
+}
+
+output "generated_step_ca_password" {
+  description = "Auto-generated step-ca password value (empty when an external secret ARN was provided or step-ca is disabled)"
+  value       = local.auto_generated_step_ca_password
+  sensitive   = true
+}

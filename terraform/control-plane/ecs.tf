@@ -35,11 +35,12 @@ resource "aws_ecs_cluster" "controlplane" {
 }
 
 resource "aws_lb" "events" {
-  name               = "${var.project_name}-events"
-  internal           = false
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.events_lb.id]
-  subnets            = [for subnet in aws_subnet.public : subnet.id]
+  name                       = "${var.project_name}-events"
+  internal                   = false
+  load_balancer_type         = "application"
+  security_groups            = [aws_security_group.events_lb.id]
+  subnets                    = [for subnet in aws_subnet.public : subnet.id]
+  drop_invalid_header_fields = true
 
   tags = { Name = "${var.project_name}-events-alb" }
 }

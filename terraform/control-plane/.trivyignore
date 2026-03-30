@@ -11,3 +11,12 @@ AWS-0132
 
 # S3 bucket logging not enabled — acceptable for demo.
 AWS-0089
+
+# Load balancers are intentionally internet-facing (events ALB, registry NLB, step-ca NLB).
+AWS-0053
+
+# Public subnets assign public IPs — required for internet-facing ECS tasks in this demo VPC.
+AWS-0164
+
+# Security groups allow unrestricted egress — ECS tasks require outbound internet access.
+AWS-0104
