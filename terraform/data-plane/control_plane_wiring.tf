@@ -3,16 +3,19 @@
 # -----------------------------------------------------------------------------
 
 data "terraform_remote_state" "control_plane" {
-  count = var.use_control_plane_remote_state && fileexists(var.control_plane_state_path) ? 1 : 0
+  count = var.use_control_plane_remote_state && fileexists(local.control_plane_state_path_resolved) ? 1 : 0
 
   backend = "local"
   config = {
-    path = var.control_plane_state_path
+    path = local.control_plane_state_path_resolved
   }
 }
 
 locals {
-  control_plane_state_found = var.use_control_plane_remote_state && fileexists(var.control_plane_state_path)
+  control_plane_state_path_expanded = pathexpand(var.control_plane_state_path)
+  control_plane_state_path_resolved = startswith(local.control_plane_state_path_expanded, "/") ? local.control_plane_state_path_expanded : abspath("${path.module}/${local.control_plane_state_path_expanded}")
+
+  control_plane_state_found = var.use_control_plane_remote_state && fileexists(local.control_plane_state_path_resolved)
   control_plane_outputs     = local.control_plane_state_found ? try(data.terraform_remote_state.control_plane[0].outputs, {}) : {}
 
   effective_s3_configs_bucket_id  = var.s3_configs_bucket_id != "" ? var.s3_configs_bucket_id : try(local.control_plane_outputs.config_bucket_name, "")
@@ -43,7 +46,7 @@ resource "terraform_data" "validate_control_plane_wiring" {
         local.control_plane_state_found ||
         (var.s3_configs_bucket_id != "" && var.s3_configs_bucket_arn != "")
       )
-      error_message = "control-plane state file not found at control_plane_state_path. Apply control-plane first, set control_plane_state_path correctly, or provide s3_configs_bucket_id/s3_configs_bucket_arn manually."
+      error_message = format("control-plane state file not found at %s (from control_plane_state_path=%s). Apply control-plane first, set control_plane_state_path correctly, or provide s3_configs_bucket_id/s3_configs_bucket_arn manually.", local.control_plane_state_path_resolved, var.control_plane_state_path)
     }
 
     precondition {
@@ -58,12 +61,12 @@ resource "terraform_data" "validate_control_plane_wiring" {
 
     precondition {
       condition     = local.effective_registry_url != ""
-      error_message = "registry_url is required for node enrollment/heartbeat (set explicitly or auto-wire from control-plane outputs)."
+      error_message = format("registry_url is required for node enrollment/heartbeat (set explicitly or auto-wire from control-plane outputs). If auto-wiring is enabled, verify control_plane_state_path resolves to %s and contains output registry_url.", local.control_plane_state_path_resolved)
     }
 
     precondition {
       condition     = local.effective_registry_server_name != ""
-      error_message = "registry_server_name could not be determined. Set registry_server_name explicitly or provide a valid registry_url."
+      error_message = format("registry_server_name could not be determined. Set registry_server_name explicitly or provide a valid registry_url. If auto-wiring is enabled, verify control_plane_state_path resolves to %s and contains output registry_url.", local.control_plane_state_path_resolved)
     }
 
     precondition {
