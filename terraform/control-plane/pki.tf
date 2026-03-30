@@ -186,10 +186,11 @@ locals {
 
   step_ca_container_definition = var.enable_step_ca ? merge(
     {
-      name      = "${var.project_name}-step-ca"
-      image     = var.step_ca_image
-      essential = true
-      command   = ["/bin/sh", "-lc", local.step_ca_bootstrap_script]
+      name       = "${var.project_name}-step-ca"
+      image      = var.step_ca_image
+      essential  = true
+      entryPoint = ["/bin/sh", "-lc"]
+      command    = [local.step_ca_bootstrap_script]
       portMappings = [
         {
           containerPort = var.step_ca_task_port

@@ -59,6 +59,11 @@ output "node_key_name" {
   value       = var.node_key_name
 }
 
+output "node_ami_id" {
+  description = "Resolved AMI ID used by Firework nodes"
+  value       = local.effective_node_ami_id
+}
+
 output "node_agent_log_group_name" {
   description = "CloudWatch Logs group for firework-agent logs"
   value       = aws_cloudwatch_log_group.node_agent.name

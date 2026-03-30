@@ -132,10 +132,10 @@ resource "aws_lb_listener" "registry_tcp" {
 locals {
   events_bootstrap_script = <<EOT
     set -eu
-    mkdir -p /etc/firework/tls
-    printf '%s' "$EVENTS_TLS_CERT_PEM" > /etc/firework/tls/controlplane.crt
-    printf '%s' "$EVENTS_TLS_KEY_PEM" > /etc/firework/tls/controlplane.key
-    chmod 0600 /etc/firework/tls/controlplane.key
+    mkdir -p /tmp/firework/tls
+    printf '%s' "$EVENTS_TLS_CERT_PEM" > /tmp/firework/tls/controlplane.crt
+    printf '%s' "$EVENTS_TLS_KEY_PEM" > /tmp/firework/tls/controlplane.key
+    chmod 0600 /tmp/firework/tls/controlplane.key
     {
       printf '%s\n' \
         'role: "events"' \
@@ -154,28 +154,30 @@ locals {
         'controller_tick: "${var.controller_tick}"' \
         'target_branch: "${var.target_branch}"' \
         'config_dir: "${var.config_dir}"' \
+        'git_repo_url: "${var.git_repo_url}"' \
+        'reconcile_on_start: ${var.reconcile_on_start}' \
         "github_webhook_secret: \"$GITHUB_WEBHOOK_SECRET\"" \
         'tls:' \
-        '  cert_file: "/etc/firework/tls/controlplane.crt"' \
-        '  key_file: "/etc/firework/tls/controlplane.key"'
-    } > /etc/firework/controlplane.yaml
-    chmod 0600 /etc/firework/controlplane.yaml
-    exec ${var.controlplane_binary_path} --config /etc/firework/controlplane.yaml
+        '  cert_file: "/tmp/firework/tls/controlplane.crt"' \
+        '  key_file: "/tmp/firework/tls/controlplane.key"'
+    } > /tmp/firework/controlplane.yaml
+    chmod 0600 /tmp/firework/controlplane.yaml
+    exec ${var.controlplane_binary_path} --config /tmp/firework/controlplane.yaml
   EOT
 
   registry_bootstrap_script = <<EOT
     set -eu
-    mkdir -p /etc/firework/tls /etc/firework/pki
-    printf '%s' "$REGISTRY_TLS_CERT_PEM" > /etc/firework/tls/controlplane.crt
-    printf '%s' "$REGISTRY_TLS_KEY_PEM" > /etc/firework/tls/controlplane.key
-    printf '%s' "$REGISTRY_CLIENT_CA_PEM" > /etc/firework/pki/node-ca.crt
+    mkdir -p /tmp/firework/tls /tmp/firework/pki
+    printf '%s' "$REGISTRY_TLS_CERT_PEM" > /tmp/firework/tls/controlplane.crt
+    printf '%s' "$REGISTRY_TLS_KEY_PEM" > /tmp/firework/tls/controlplane.key
+    printf '%s' "$REGISTRY_CLIENT_CA_PEM" > /tmp/firework/pki/node-ca.crt
 %{if local.registry_enrollment_enabled}
-    printf '%s' "$REGISTRY_ENROLLMENT_CA_PEM" > /etc/firework/pki/enrollment-ca.crt
-    printf '%s' "$REGISTRY_ENROLLMENT_CA_KEY_PEM" > /etc/firework/pki/enrollment-ca.key
+    printf '%s' "$REGISTRY_ENROLLMENT_CA_PEM" > /tmp/firework/pki/enrollment-ca.crt
+    printf '%s' "$REGISTRY_ENROLLMENT_CA_KEY_PEM" > /tmp/firework/pki/enrollment-ca.key
 %{endif}
-    chmod 0600 /etc/firework/tls/controlplane.key
+    chmod 0600 /tmp/firework/tls/controlplane.key
 %{if local.registry_enrollment_enabled}
-    chmod 0600 /etc/firework/pki/enrollment-ca.key
+    chmod 0600 /tmp/firework/pki/enrollment-ca.key
 %{endif}
     {
       printf '%s\n' \
@@ -195,15 +197,17 @@ locals {
         'controller_tick: "${var.controller_tick}"' \
         'target_branch: "${var.target_branch}"' \
         'config_dir: "${var.config_dir}"' \
+        'git_repo_url: "${var.git_repo_url}"' \
+        'reconcile_on_start: ${var.reconcile_on_start}' \
         'tls:' \
-        '  cert_file: "/etc/firework/tls/controlplane.crt"' \
-        '  key_file: "/etc/firework/tls/controlplane.key"' \
-        '  client_ca_file: "/etc/firework/pki/node-ca.crt"'
+        '  cert_file: "/tmp/firework/tls/controlplane.crt"' \
+        '  key_file: "/tmp/firework/tls/controlplane.key"' \
+        '  client_ca_file: "/tmp/firework/pki/node-ca.crt"'
 %{if local.registry_enrollment_enabled}
       printf '%s\n' \
         'enrollment:' \
-        '  ca_file: "/etc/firework/pki/enrollment-ca.crt"' \
-        '  ca_key_file: "/etc/firework/pki/enrollment-ca.key"' \
+        '  ca_file: "/tmp/firework/pki/enrollment-ca.crt"' \
+        '  ca_key_file: "/tmp/firework/pki/enrollment-ca.key"' \
         '  node_cert_ttl: "${var.registry_node_cert_ttl}"'
 %{if local.registry_bootstrap_token_enabled}
       printf '%s\n' \
@@ -215,14 +219,14 @@ locals {
 %{endif}
 %{endif}
 %{endif}
-    } > /etc/firework/controlplane.yaml
-    chmod 0600 /etc/firework/controlplane.yaml
-    exec ${var.controlplane_binary_path} --config /etc/firework/controlplane.yaml
+    } > /tmp/firework/controlplane.yaml
+    chmod 0600 /tmp/firework/controlplane.yaml
+    exec ${var.controlplane_binary_path} --config /tmp/firework/controlplane.yaml
   EOT
 
   controller_bootstrap_script = <<EOT
     set -eu
-    mkdir -p /etc/firework
+    mkdir -p /tmp/firework
     {
       printf '%s\n' \
         'role: "controller"' \
@@ -240,10 +244,12 @@ locals {
         'leader_renew_interval: "${var.leader_renew_interval}"' \
         'controller_tick: "${var.controller_tick}"' \
         'target_branch: "${var.target_branch}"' \
-        'config_dir: "${var.config_dir}"'
-    } > /etc/firework/controlplane.yaml
-    chmod 0600 /etc/firework/controlplane.yaml
-    exec ${var.controlplane_binary_path} --config /etc/firework/controlplane.yaml
+        'config_dir: "${var.config_dir}"' \
+        'git_repo_url: "${var.git_repo_url}"' \
+        'reconcile_on_start: ${var.reconcile_on_start}'
+    } > /tmp/firework/controlplane.yaml
+    chmod 0600 /tmp/firework/controlplane.yaml
+    exec ${var.controlplane_binary_path} --config /tmp/firework/controlplane.yaml
   EOT
 
   events_secret_entries = concat(
@@ -272,10 +278,11 @@ locals {
 
   events_container_definition = merge(
     {
-      name      = local.events_container_name
-      image     = var.controlplane_image
-      essential = true
-      command   = ["/bin/sh", "-lc", local.events_bootstrap_script]
+      name       = local.events_container_name
+      image      = var.controlplane_image
+      essential  = true
+      entryPoint = ["/bin/sh", "-lc"]
+      command    = [local.events_bootstrap_script]
       portMappings = [
         {
           containerPort = var.events_task_port
@@ -302,10 +309,11 @@ locals {
 
   registry_container_definition = merge(
     {
-      name      = local.registry_container_name
-      image     = var.controlplane_image
-      essential = true
-      command   = ["/bin/sh", "-lc", local.registry_bootstrap_script]
+      name       = local.registry_container_name
+      image      = var.controlplane_image
+      essential  = true
+      entryPoint = ["/bin/sh", "-lc"]
+      command    = [local.registry_bootstrap_script]
       portMappings = [
         {
           containerPort = var.registry_task_port
@@ -332,10 +340,11 @@ locals {
 
   controller_container_definition = merge(
     {
-      name      = local.controller_container_name
-      image     = var.controlplane_image
-      essential = true
-      command   = ["/bin/sh", "-lc", local.controller_bootstrap_script]
+      name       = local.controller_container_name
+      image      = var.controlplane_image
+      essential  = true
+      entryPoint = ["/bin/sh", "-lc"]
+      command    = [local.controller_bootstrap_script]
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -377,6 +386,11 @@ resource "aws_ecs_task_definition" "events" {
     precondition {
       condition     = local.effective_github_webhook_secret_arn != ""
       error_message = "GitHub webhook secret is required (set github_webhook_secret_secret_arn or enable auto_create_demo_secrets)."
+    }
+
+    precondition {
+      condition     = !var.reconcile_on_start || var.git_repo_url != ""
+      error_message = "git_repo_url is required when reconcile_on_start is true."
     }
   }
 

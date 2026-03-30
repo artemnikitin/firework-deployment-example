@@ -64,6 +64,18 @@ variable "config_dir" {
   default     = ""
 }
 
+variable "git_repo_url" {
+  description = "Git repo URL used for startup reconciliation when reconcile_on_start is enabled."
+  type        = string
+  default     = ""
+}
+
+variable "reconcile_on_start" {
+  description = "When true, events role performs an immediate Git reconciliation on startup using git_repo_url."
+  type        = bool
+  default     = false
+}
+
 variable "leader_lease_ttl" {
   description = "Controller leader lease TTL."
   type        = string
@@ -138,7 +150,7 @@ variable "controlplane_image" {
 variable "controlplane_binary_path" {
   description = "Path to firework-controlplane binary inside the container image."
   type        = string
-  default     = "/usr/bin/firework-controlplane"
+  default     = "/usr/local/bin/firework-controlplane"
 }
 
 variable "controlplane_image_pull_secret_arn" {

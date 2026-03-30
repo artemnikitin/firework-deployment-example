@@ -18,9 +18,15 @@ locals {
   control_plane_state_found = var.use_control_plane_remote_state && fileexists(local.control_plane_state_path_resolved)
   control_plane_outputs     = local.control_plane_state_found ? try(data.terraform_remote_state.control_plane[0].outputs, {}) : {}
 
-  effective_s3_configs_bucket_id  = var.s3_configs_bucket_id != "" ? var.s3_configs_bucket_id : try(local.control_plane_outputs.config_bucket_name, "")
-  effective_s3_configs_bucket_arn = var.s3_configs_bucket_arn != "" ? var.s3_configs_bucket_arn : try(local.control_plane_outputs.config_bucket_arn, "")
-  effective_s3_configs_prefix     = var.s3_configs_prefix != "" ? var.s3_configs_prefix : (try(local.control_plane_outputs.config_prefix, "") != "" ? try(local.control_plane_outputs.config_prefix, "") : "cp/v1/")
+  control_plane_config_bucket_name = try(local.control_plane_outputs.config_bucket_name, "")
+  control_plane_config_bucket_arn  = try(local.control_plane_outputs.config_bucket_arn, "")
+  control_plane_config_prefix      = try(local.control_plane_outputs.config_prefix, "")
+
+  # When control-plane outputs are available, prefer them over potentially stale
+  # manual tfvars values. Manual values remain a fallback when state is missing.
+  effective_s3_configs_bucket_id  = local.control_plane_config_bucket_name != "" ? local.control_plane_config_bucket_name : var.s3_configs_bucket_id
+  effective_s3_configs_bucket_arn = local.control_plane_config_bucket_arn != "" ? local.control_plane_config_bucket_arn : var.s3_configs_bucket_arn
+  effective_s3_configs_prefix     = local.control_plane_config_prefix != "" ? local.control_plane_config_prefix : (var.s3_configs_prefix != "" ? var.s3_configs_prefix : "cp/v1/")
 
   effective_registry_url = var.registry_url != "" ? var.registry_url : try(local.control_plane_outputs.registry_url, "")
   registry_authority     = local.effective_registry_url != "" ? split("/", trimprefix(trimprefix(local.effective_registry_url, "https://"), "http://"))[0] : ""

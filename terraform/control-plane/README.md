@@ -26,6 +26,9 @@ This stack provisions Firework control plane on ECS/Fargate with **separated rol
   - If omitted, this stack auto-generates demo secrets when `auto_create_demo_secrets = true` (default).
   - Optional GHCR pull credentials (`controlplane_image_pull_secret_arn`)
   - Optional GitHub token for private config repos
+- Optional startup reconciliation:
+  - `reconcile_on_start = true`
+  - `git_repo_url = "https://github.com/<owner>/<repo>"`
 
 ## Minimal Input (quick start)
 
@@ -37,6 +40,8 @@ For a demo deployment, only these are required in `terraform.tfvars`:
   - `events_domain_name` (plus optional `events_hosted_zone_name` override)
 
 Everything else can use defaults and auto-generated secrets.
+
+If you enable `reconcile_on_start`, you must also set `git_repo_url`.
 
 ## Deploy
 

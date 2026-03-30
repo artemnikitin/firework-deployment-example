@@ -24,8 +24,9 @@ This stack depends on:
 - By default, this stack auto-wires config/registry/step-ca values from `../control-plane/terraform.tfstate`
   (`use_control_plane_remote_state = true`, `control_plane_state_path = "../control-plane/terraform.tfstate"`)
   - If your control-plane state lives elsewhere, point `control_plane_state_path` to it or disable auto-wiring and set manual overrides.
+  - For S3 config bucket values, auto-wired control-plane outputs are preferred over manual tfvars when present (to avoid stale overrides).
 - Existing S3 images bucket and ARN
-- Firework node AMI ID (built by Packer)
+- Firework node AMI source (explicit ID, name pattern lookup, or Packer manifest)
 
 Apply order is strict: deploy `terraform/control-plane` first, then `terraform/data-plane`.
 
@@ -36,8 +37,22 @@ With control-plane auto-wiring enabled, the minimum required `terraform.tfvars` 
 - `domain_name`
 - `s3_images_bucket_id`
 - `s3_images_bucket_arn`
-- `node_ami_id`
 - `node_key_name`
+
+`node_ami_id` is optional when one of these AMI auto-resolution paths is available.
+
+## Node AMI resolution
+
+Node AMI is resolved in this priority order:
+
+1. `node_ami_id` (explicit override)
+2. `node_ami_name_pattern` (latest matching AMI in AWS)
+3. `packer_manifest_path` (latest AMI for `aws_region` from `packer/manifest.json` when `use_packer_manifest_ami = true`)
+
+Notes:
+
+- For `node_ami_name_pattern`, you can pass a partial name (for example `firework-node`); Terraform automatically searches as `*firework-node*`.
+- Pattern lookup uses owners from `node_ami_owners` (default `["self"]`) and architecture `node_ami_architecture` (default `arm64`).
 
 ## Node certificate bootstrap modes
 

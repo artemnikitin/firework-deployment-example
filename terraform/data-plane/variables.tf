@@ -132,8 +132,44 @@ variable "node_instance_type" {
 }
 
 variable "node_ami_id" {
-  description = "AMI ID for the Firecracker nodes (built by Packer)"
+  description = "Optional explicit AMI ID for Firecracker nodes. When empty, AMI can be resolved from node_ami_name_pattern or packer manifest."
   type        = string
+  default     = ""
+}
+
+variable "node_ami_name_pattern" {
+  description = "Optional AMI name pattern used to discover the latest matching image in aws_region. If no wildcard is provided, Terraform wraps it as *pattern*."
+  type        = string
+  default     = ""
+}
+
+variable "node_ami_owners" {
+  description = "Owners used when resolving AMI by name pattern."
+  type        = list(string)
+  default     = ["self"]
+}
+
+variable "node_ami_architecture" {
+  description = "Architecture filter used when resolving AMI by name pattern."
+  type        = string
+  default     = "arm64"
+
+  validation {
+    condition     = var.node_ami_architecture != ""
+    error_message = "node_ami_architecture must be non-empty (for example arm64)."
+  }
+}
+
+variable "use_packer_manifest_ami" {
+  description = "When true and node_ami_id/node_ami_name_pattern are empty, resolve AMI from the latest entry in packer manifest."
+  type        = bool
+  default     = true
+}
+
+variable "packer_manifest_path" {
+  description = "Path to Packer manifest.json used for AMI auto-resolution (relative to this stack when not absolute)."
+  type        = string
+  default     = "../../packer/manifest.json"
 }
 
 variable "node_key_name" {

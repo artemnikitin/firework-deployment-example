@@ -253,22 +253,15 @@
       "Sid": "ECS",
       "Effect": "Allow",
       "Action": [
-        "ecs:CreateCluster",
-        "ecs:DeleteCluster",
-        "ecs:DescribeClusters",
-        "ecs:ListClusters",
-        "ecs:UpdateCluster",
+        "ecs:Create*",
+        "ecs:Delete*",
+        "ecs:Describe*",
+        "ecs:List*",
+        "ecs:Update*",
         "ecs:TagResource",
         "ecs:UntagResource",
         "ecs:RegisterTaskDefinition",
-        "ecs:DeregisterTaskDefinition",
-        "ecs:DescribeTaskDefinition",
-        "ecs:ListTaskDefinitions",
-        "ecs:CreateService",
-        "ecs:UpdateService",
-        "ecs:DeleteService",
-        "ecs:DescribeServices",
-        "ecs:ListServices"
+        "ecs:DeregisterTaskDefinition"
       ],
       "Resource": "*"
     },

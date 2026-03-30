@@ -18,6 +18,11 @@ events_domain_name = "events.example.com"
 target_branch = "main"
 # config_dir = "firework"
 
+# Optional startup reconcile (without waiting for first webhook).
+# When enabled, git_repo_url is required.
+# reconcile_on_start = true
+# git_repo_url       = "https://github.com/your-org/firework-gitops-example"
+
 # Optional private-registry credentials secret for GHCR pull.
 # Secret format must be compatible with ECS repositoryCredentials.
 # controlplane_image_pull_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:ghcr-creds-xxxxx"

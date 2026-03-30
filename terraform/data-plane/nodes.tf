@@ -4,7 +4,7 @@
 
 resource "aws_launch_template" "node" {
   name_prefix   = "${var.project_name}-node-"
-  image_id      = var.node_ami_id
+  image_id      = local.effective_node_ami_id
   instance_type = var.node_instance_type
   key_name      = var.node_key_name
 
