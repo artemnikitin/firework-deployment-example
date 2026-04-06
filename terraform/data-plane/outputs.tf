@@ -29,6 +29,21 @@ output "images_bucket_arn" {
   value       = var.s3_images_bucket_arn
 }
 
+output "configs_bucket_prefix" {
+  description = "Prefix inside the configs bucket where nodes read rendered configs from"
+  value       = local.effective_s3_configs_prefix
+}
+
+output "registry_url" {
+  description = "Resolved control-plane registry URL used by nodes"
+  value       = local.effective_registry_url
+}
+
+output "step_ca_url" {
+  description = "Resolved step-ca URL used by nodes (empty when legacy mode is used)"
+  value       = local.effective_step_ca_url
+}
+
 output "alb_dns" {
   description = "DNS name of the Application Load Balancer"
   value       = aws_lb.main.dns_name
@@ -42,6 +57,11 @@ output "wildcard_base_url" {
 output "node_key_name" {
   description = "EC2 key pair name configured for Firework nodes"
   value       = var.node_key_name
+}
+
+output "node_ami_id" {
+  description = "Resolved AMI ID used by Firework nodes"
+  value       = local.effective_node_ami_id
 }
 
 output "node_agent_log_group_name" {

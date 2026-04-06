@@ -9,19 +9,35 @@ set -euo pipefail
 #   1. Gets the instance ID from EC2 metadata
 #   2. Downloads rootfs images from S3
 #   3. Writes the node-specific agent config (with instance ID as node name)
-#   4. Configures and starts the CloudWatch Agent (logs + Prometheus metrics)
-#   5. Starts Traefik and the firework-agent
+#   4. Optionally bootstraps node certs from step-ca (AWS IID)
+#   5. Configures and starts the CloudWatch Agent (logs + Prometheus metrics)
+#   6. Starts Traefik and the firework-agent
 
 IMAGES_DIR="/var/lib/images"
 S3_IMAGES_BUCKET="${s3_images_bucket}"
 S3_REGION="${s3_region}"
 S3_CONFIGS_BUCKET="${s3_configs_bucket}"
+S3_CONFIGS_PREFIX="${s3_configs_prefix}"
+REGISTRY_URL="${registry_url}"
+REGISTRY_SERVER_NAME="${registry_server_name}"
+STEP_CA_URL="${step_ca_url}"
+STEP_CA_ROOT_CA_SECRET_ARN="${step_ca_root_ca_secret_arn}"
+STEP_CA_PROVISIONER="${step_ca_provisioner}"
+STEP_CA_SUBJECT_SUFFIX="${step_ca_subject_suffix}"
+STEP_CA_RENEW_EXPIRES_IN="${step_ca_renew_expires_in}"
+REGISTRY_CLIENT_CA_SECRET_ARN="${registry_client_ca_secret_arn}"
+REGISTRY_BOOTSTRAP_TOKEN_SECRET_ARN="${registry_bootstrap_token_secret_arn}"
 VM_SUBNET="${vm_subnet}"
 VM_GATEWAY="${vm_gateway}"
 CW_AGENT_LOG_GROUP_NAME="${cw_agent_log_group_name}"
 CW_FIRECRACKER_LOG_GROUP="${cw_firecracker_log_group}"
 CW_METRIC_NAMESPACE="${cw_metric_namespace}"
 TRAEFIK_CONFIG_DIR="${traefik_config_dir}"
+REGISTRY_CA_FILE="/etc/firework/pki/node-ca.crt"
+REGISTRY_CERT_FILE="/etc/firework/pki/node.crt"
+REGISTRY_KEY_FILE="/etc/firework/pki/node.key"
+REGISTRY_BOOTSTRAP_TOKEN=""
+STEP_BIN=""
 
 mkdir -p "$IMAGES_DIR" /var/log
 
@@ -72,7 +88,7 @@ systemctl daemon-reload
 
 # --- 0.4 Write Prometheus scrape config for the firework-agent metrics endpoint ---
 # The CW agent will scrape this and publish firework_node_* metrics to CloudWatch
-# with the 'node' dimension set to the instance ID (used by the Scheduler Lambda).
+# with the 'node' dimension set to the instance ID (used by the controller service).
 mkdir -p /etc/amazon-cloudwatch-agent
 cat >/etc/amazon-cloudwatch-agent/prometheus.yaml <<PROMCFG
 global:
@@ -135,6 +151,31 @@ if [ -x /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl ]; then
     -s || true
 fi
 
+install_step_cli() {
+  if command -v step >/dev/null 2>&1; then
+    STEP_BIN="$(command -v step)"
+    return
+  fi
+
+  cat >/etc/yum.repos.d/smallstep.repo <<'EOF'
+[smallstep]
+name=Smallstep
+baseurl=https://packages.smallstep.com/stable/fedora/
+enabled=1
+repo_gpgcheck=0
+gpgcheck=1
+gpgkey=https://packages.smallstep.com/keys/smallstep-0x889B19391F774443.gpg
+EOF
+
+  dnf makecache -y
+  dnf install -y step-cli
+  STEP_BIN="$(command -v step)"
+  if [ -z "$STEP_BIN" ]; then
+    echo "ERROR: step CLI install failed"
+    exit 1
+  fi
+}
+
 # --- 1. Download rootfs images from S3 ---
 echo "==> Downloading rootfs images from s3://$S3_IMAGES_BUCKET/"
 aws s3 sync "s3://$S3_IMAGES_BUCKET/" "$IMAGES_DIR/" \
@@ -147,12 +188,84 @@ echo "==> Images downloaded"
 PRIMARY_IF=$(ip -o route get 1.1.1.1 | awk '{print $5}')
 echo "==> Detected primary interface: $PRIMARY_IF"
 
+if [ -n "$REGISTRY_URL" ]; then
+  echo "==> Preparing registry trust material"
+
+  mkdir -p /etc/firework/pki
+
+  REGISTRY_CA_SECRET_ARN="$REGISTRY_CLIENT_CA_SECRET_ARN"
+  if [ -n "$STEP_CA_ROOT_CA_SECRET_ARN" ]; then
+    REGISTRY_CA_SECRET_ARN="$STEP_CA_ROOT_CA_SECRET_ARN"
+  fi
+  if [ -z "$REGISTRY_CA_SECRET_ARN" ]; then
+    echo "ERROR: registry_url is set but no CA secret ARN is configured"
+    echo "       Set step_ca_root_ca_secret_arn (preferred) or registry_client_ca_secret_arn (legacy)."
+    exit 1
+  fi
+
+  aws secretsmanager get-secret-value \
+    --secret-id "$REGISTRY_CA_SECRET_ARN" \
+    --region "$S3_REGION" \
+    --query SecretString \
+    --output text > "$REGISTRY_CA_FILE"
+  chmod 0644 "$REGISTRY_CA_FILE"
+
+  if [ -n "$STEP_CA_URL" ]; then
+    echo "==> Bootstrapping node certificate via step-ca AWS IID provisioner"
+    install_step_cli
+
+    STEP_CA_ROOT_FINGERPRINT=$("$STEP_BIN" certificate fingerprint "$REGISTRY_CA_FILE")
+    "$STEP_BIN" ca bootstrap \
+      --ca-url "$STEP_CA_URL" \
+      --fingerprint "$STEP_CA_ROOT_FINGERPRINT" \
+      --install \
+      --force
+
+    STEP_NODE_SUBJECT="$INSTANCE_ID$STEP_CA_SUBJECT_SUFFIX"
+    "$STEP_BIN" ca certificate "$STEP_NODE_SUBJECT" \
+      "$REGISTRY_CERT_FILE" "$REGISTRY_KEY_FILE" \
+      --provisioner "$STEP_CA_PROVISIONER" \
+      --ca-url "$STEP_CA_URL" \
+      --root "$REGISTRY_CA_FILE" \
+      --force
+    chmod 0600 "$REGISTRY_KEY_FILE"
+
+    cat >/etc/systemd/system/firework-step-renew.service <<EOF
+[Unit]
+Description=Renew Firework node certificate via step-ca
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=$STEP_BIN ca renew --daemon --expires-in $STEP_CA_RENEW_EXPIRES_IN --force --ca-url $STEP_CA_URL --root $REGISTRY_CA_FILE --exec "systemctl restart firework-agent" $REGISTRY_CERT_FILE $REGISTRY_KEY_FILE
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+    systemctl enable --now firework-step-renew.service
+  elif [ -n "$REGISTRY_BOOTSTRAP_TOKEN_SECRET_ARN" ]; then
+    REGISTRY_BOOTSTRAP_TOKEN=$(aws secretsmanager get-secret-value \
+      --secret-id "$REGISTRY_BOOTSTRAP_TOKEN_SECRET_ARN" \
+      --region "$S3_REGION" \
+      --query SecretString \
+      --output text)
+  else
+    echo "ERROR: registry_url is set but neither step_ca_url nor registry_bootstrap_token_secret_arn is configured"
+    exit 1
+  fi
+fi
+
 echo "==> Writing agent config"
 cat > /etc/firework/agent.yaml <<AGENTCFG
 node_names:
   - "$INSTANCE_ID"
 store_type: "s3"
 s3_bucket: "$S3_CONFIGS_BUCKET"
+s3_prefix: "$S3_CONFIGS_PREFIX"
 s3_region: "$S3_REGION"
 s3_images_bucket: "$S3_IMAGES_BUCKET"
 images_dir: "$IMAGES_DIR"
@@ -169,6 +282,22 @@ vm_gateway: "$VM_GATEWAY"
 out_interface: "$PRIMARY_IF"
 traefik_config_dir: "$TRAEFIK_CONFIG_DIR"
 AGENTCFG
+
+if [ -n "$REGISTRY_URL" ]; then
+  cat >> /etc/firework/agent.yaml <<REGISTRYCFG
+registry_url: "$REGISTRY_URL"
+registry_server_name: "$REGISTRY_SERVER_NAME"
+registry_cert_file: "$REGISTRY_CERT_FILE"
+registry_key_file: "$REGISTRY_KEY_FILE"
+registry_ca_file: "$REGISTRY_CA_FILE"
+REGISTRYCFG
+
+  if [ -n "$REGISTRY_BOOTSTRAP_TOKEN" ]; then
+    cat >> /etc/firework/agent.yaml <<REGISTRYTOKENCFG
+registry_bootstrap_token: "$REGISTRY_BOOTSTRAP_TOKEN"
+REGISTRYTOKENCFG
+  fi
+fi
 
 # --- 3. Start Traefik ---
 echo "==> Starting Traefik"

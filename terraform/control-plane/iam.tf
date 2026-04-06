@@ -1,155 +1,86 @@
 # -----------------------------------------------------------------------------
-# Enricher Lambda IAM role and policies
+# ECS IAM roles and policies
 # -----------------------------------------------------------------------------
 
-data "aws_iam_policy_document" "lambda_assume" {
+locals {
+  iam_state_prefix_pattern = local.state_prefix_clean == "" ? "*" : "${local.state_prefix_clean}/*"
+  iam_state_object_arn     = local.state_prefix_clean == "" ? "${aws_s3_bucket.configs.arn}/*" : "${aws_s3_bucket.configs.arn}/${local.state_prefix_clean}/*"
+}
+
+data "aws_iam_policy_document" "ecs_task_assume" {
   statement {
     actions = ["sts:AssumeRole"]
     principals {
       type        = "Service"
-      identifiers = ["lambda.amazonaws.com"]
+      identifiers = ["ecs-tasks.amazonaws.com"]
     }
   }
 }
 
-resource "aws_iam_role" "enricher" {
-  name_prefix        = "${var.project_name}-enricher-"
-  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
+resource "aws_iam_role" "task_execution" {
+  name_prefix        = "${var.project_name}-cp-exec-"
+  assume_role_policy = data.aws_iam_policy_document.ecs_task_assume.json
 
-  tags = { Name = "${var.project_name}-enricher-role" }
+  tags = { Name = "${var.project_name}-cp-task-execution-role" }
 }
 
-# Allow enricher to write configs to S3
-data "aws_iam_policy_document" "enricher_s3" {
+resource "aws_iam_role_policy_attachment" "task_execution_managed" {
+  role       = aws_iam_role.task_execution.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+data "aws_iam_policy_document" "task_execution_secrets" {
+  count = length(local.secret_arns) > 0 ? 1 : 0
+
+  statement {
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = local.secret_arns
+  }
+
+  statement {
+    actions   = ["kms:Decrypt"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "task_execution_secrets" {
+  count = length(local.secret_arns) > 0 ? 1 : 0
+
+  name_prefix = "secrets-read-"
+  role        = aws_iam_role.task_execution.id
+  policy      = data.aws_iam_policy_document.task_execution_secrets[0].json
+}
+
+resource "aws_iam_role" "task" {
+  name_prefix        = "${var.project_name}-cp-task-"
+  assume_role_policy = data.aws_iam_policy_document.ecs_task_assume.json
+
+  tags = { Name = "${var.project_name}-cp-task-role" }
+}
+
+data "aws_iam_policy_document" "task_s3_state" {
   statement {
     actions   = ["s3:ListBucket"]
     resources = [aws_s3_bucket.configs.arn]
     condition {
       test     = "StringLike"
       variable = "s3:prefix"
-      values   = ["nodes/*"]
+      values   = [local.iam_state_prefix_pattern]
     }
   }
+
   statement {
     actions = [
       "s3:GetObject",
       "s3:PutObject",
-      "s3:DeleteObject"
+      "s3:DeleteObject",
     ]
-    resources = ["${aws_s3_bucket.configs.arn}/nodes/*"]
-  }
-
-}
-
-resource "aws_iam_role_policy" "enricher_s3" {
-  name_prefix = "s3-write-configs-"
-  role        = aws_iam_role.enricher.id
-  policy      = data.aws_iam_policy_document.enricher_s3.json
-}
-
-# CloudWatch Logs for Lambda
-resource "aws_iam_role_policy_attachment" "enricher_logs" {
-  role       = aws_iam_role.enricher.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
-
-# Allow enricher to resolve EC2 instance private IPs for cross-node links.
-data "aws_iam_policy_document" "enricher_ec2" {
-  statement {
-    actions   = ["ec2:DescribeInstances"]
-    resources = ["*"]
+    resources = [local.iam_state_object_arn]
   }
 }
 
-resource "aws_iam_role_policy" "enricher_ec2" {
-  name_prefix = "ec2-describe-instances-"
-  role        = aws_iam_role.enricher.id
-  policy      = data.aws_iam_policy_document.enricher_ec2.json
-}
-
-# Allow enricher to invoke the scheduler Lambda.
-data "aws_iam_policy_document" "enricher_invoke_scheduler" {
-  statement {
-    actions   = ["lambda:InvokeFunction"]
-    resources = [aws_lambda_function.scheduler.arn]
-  }
-}
-
-resource "aws_iam_role_policy" "enricher_invoke_scheduler" {
-  name_prefix = "invoke-scheduler-"
-  role        = aws_iam_role.enricher.id
-  policy      = data.aws_iam_policy_document.enricher_invoke_scheduler.json
-}
-
-# Optional X-Ray segment publishing from Lambda.
-resource "aws_iam_role_policy_attachment" "enricher_xray" {
-  count = var.enable_xray_tracing ? 1 : 0
-
-  role       = aws_iam_role.enricher.name
-  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
-}
-
-# =============================================================================
-# Scheduler Lambda IAM role and policies
-# =============================================================================
-
-resource "aws_iam_role" "scheduler" {
-  name_prefix        = "${var.project_name}-scheduler-"
-  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
-
-  tags = { Name = "${var.project_name}-scheduler-role" }
-}
-
-# CloudWatch Logs for Lambda execution
-resource "aws_iam_role_policy_attachment" "scheduler_logs" {
-  role       = aws_iam_role.scheduler.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
-
-# Allow scheduler to read node capacity metrics from CloudWatch.
-data "aws_iam_policy_document" "scheduler_cloudwatch" {
-  statement {
-    actions = [
-      "cloudwatch:ListMetrics",
-      "cloudwatch:GetMetricData",
-    ]
-    resources = ["*"]
-  }
-}
-
-resource "aws_iam_role_policy" "scheduler_cloudwatch" {
-  name_prefix = "cloudwatch-read-"
-  role        = aws_iam_role.scheduler.id
-  policy      = data.aws_iam_policy_document.scheduler_cloudwatch.json
-}
-
-# Allow scheduler to read existing placement from S3 (for stability).
-data "aws_iam_policy_document" "scheduler_s3" {
-  statement {
-    actions   = ["s3:ListBucket"]
-    resources = [aws_s3_bucket.configs.arn]
-    condition {
-      test     = "StringLike"
-      variable = "s3:prefix"
-      values   = ["nodes/*"]
-    }
-  }
-  statement {
-    actions   = ["s3:GetObject"]
-    resources = ["${aws_s3_bucket.configs.arn}/nodes/*"]
-  }
-}
-
-resource "aws_iam_role_policy" "scheduler_s3" {
-  name_prefix = "s3-read-placement-"
-  role        = aws_iam_role.scheduler.id
-  policy      = data.aws_iam_policy_document.scheduler_s3.json
-}
-
-# Optional X-Ray tracing for scheduler.
-resource "aws_iam_role_policy_attachment" "scheduler_xray" {
-  count = var.enable_xray_tracing ? 1 : 0
-
-  role       = aws_iam_role.scheduler.name
-  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
+resource "aws_iam_role_policy" "task_s3_state" {
+  name_prefix = "s3-state-"
+  role        = aws_iam_role.task.id
+  policy      = data.aws_iam_policy_document.task_s3_state.json
 }

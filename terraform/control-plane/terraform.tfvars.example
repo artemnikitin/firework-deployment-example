@@ -3,38 +3,65 @@
 aws_region   = "us-east-1"
 project_name = "firework-demo"
 
-# HTTPS clone URL of the GitOps config repo.
-# Used by the EventBridge-triggered periodic re-sync (every 5 minutes).
-config_repo_url = "https://github.com/your-org/your-config-repo"
+# GHCR image with firework-controlplane binary.
+controlplane_image = "ghcr.io/your-org/firework-controlplane:latest"
 
-# Git branch the enricher processes.
-config_repo_branch = "main"
+# Events HTTPS listener certificate (choose one option):
+# Option A: provide an existing ACM cert ARN.
+# events_acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+# Option B: auto-create ACM cert + DNS validation in Route53.
+events_domain_name = "events.example.com"
+# Optional zone override (if omitted, derived from events_domain_name by stripping the first label).
+# events_hosted_zone_name = "example.com"
 
-# GitHub personal access token for cloning the config repo.
-# Required when the config repo is private. Needs at least read:contents scope.
-github_token = "ghp_..."
+# GitOps input filtering.
+target_branch = "main"
+# config_dir = "firework"
 
-# GitHub webhook secret used to validate incoming payloads (optional but recommended).
-# Must match the secret set in the GitHub webhook settings.
-github_webhook_secret = "your-secret-here"
+# Optional startup reconcile (without waiting for first webhook).
+# When enabled, git_repo_url is required.
+# reconcile_on_start = true
+# git_repo_url       = "https://github.com/your-org/firework-gitops-example"
 
-# CloudWatch namespace used by the scheduler Lambda to discover node capacity.
-# Must match the agent_metric_namespace output from the infra stack.
-# (e.g. run: terraform -chdir=../infra output agent_metric_namespace)
-cw_namespace = "FireworkDemo"
+# Optional private-registry credentials secret for GHCR pull.
+# Secret format must be compatible with ECS repositoryCredentials.
+# controlplane_image_pull_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:ghcr-creds-xxxxx"
 
-# Enricher binary source — choose one of:
-#   a) Download from GitHub releases (default — leave both commented out):
-#      enricher_version = "latest"   # or a specific version e.g. "1.2.0"
-#
-#   b) Use a locally built binary:
-#      enricher_zip_path = "../../firework/bin/enricher.zip"
-#      (build with: cd firework && make package-enricher)
+# Auto-create demo secrets for missing webhook/TLS/PKI values.
+# Keep enabled for fast setup; disable for production-style explicit secret management.
+auto_create_demo_secrets = true
 
-# Scheduler binary source — choose one of:
-#   a) Download from GitHub releases (default — leave both commented out):
-#      scheduler_version = "latest"   # or a specific version e.g. "1.2.0"
-#
-#   b) Use a locally built binary:
-#      scheduler_zip_path = "../../firework/bin/scheduler.zip"
-#      (build with: cd firework && make package-scheduler)
+# Optional explicit Secrets Manager ARNs (override auto-generated values when set).
+# github_webhook_secret_secret_arn      = "arn:aws:secretsmanager:us-east-1:123456789012:secret:firework-github-webhook-xxxxx"
+# events_tls_cert_secret_arn            = "arn:aws:secretsmanager:us-east-1:123456789012:secret:firework-events-tls-cert-xxxxx"
+# events_tls_key_secret_arn             = "arn:aws:secretsmanager:us-east-1:123456789012:secret:firework-events-tls-key-xxxxx"
+# registry_tls_cert_secret_arn          = "arn:aws:secretsmanager:us-east-1:123456789012:secret:firework-registry-tls-cert-xxxxx"
+# registry_tls_key_secret_arn           = "arn:aws:secretsmanager:us-east-1:123456789012:secret:firework-registry-tls-key-xxxxx"
+# registry_client_ca_secret_arn         = "arn:aws:secretsmanager:us-east-1:123456789012:secret:firework-node-client-ca-xxxxx"
+# Legacy fallback (required when enable_step_ca = false unless auto-generated).
+# registry_enrollment_ca_secret_arn     = "arn:aws:secretsmanager:us-east-1:123456789012:secret:firework-enrollment-ca-cert-xxxxx"
+# registry_enrollment_ca_key_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:firework-enrollment-ca-key-xxxxx"
+# registry_bootstrap_token_secret_arn   = "arn:aws:secretsmanager:us-east-1:123456789012:secret:firework-bootstrap-token-xxxxx"
+# Optional hardening: make registry NLB private-only.
+# registry_internal                   = true
+
+# Optional step-ca PKI service (recommended before switching node bootstrap to AWS IID).
+# enable_step_ca                 = true
+# step_ca_password_secret_arn    = "arn:aws:secretsmanager:us-east-1:123456789012:secret:firework-step-ca-password-xxxxx" # optional when auto_create_demo_secrets=true
+# step_ca_root_ca_secret_arn     = "arn:aws:secretsmanager:us-east-1:123456789012:secret:firework-step-ca-root-ca-xxxxx"
+# step_ca_internal               = false
+# step_ca_desired_count          = 1  # keep 1; this setup is single-writer
+# step_ca_allowed_cidrs          = ["0.0.0.0/0"]
+# step_ca_additional_dns_names   = ["pki.internal"]
+# step_ca_aws_provisioner_name   = "aws-iid"
+# step_ca_cert_ttl               = "24h"
+# step_ca_provisioner_disable_custom_sans = false
+
+# Optional: restrict bootstrap token to a specific node_id.
+# registry_bootstrap_node_id = "node-1"
+
+# Optional GitHub token for private config repos (used by events role go-git clone).
+# github_token_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:firework-github-token-xxxxx"
+
+# S3 state/render prefix consumed by agents.
+state_prefix = "cp/v1"

@@ -30,7 +30,7 @@ resource "aws_lb" "main" {
 #
 # The full fix requires one target group per node and ALB listener rules mapping each tenant
 # hostname to the node where that tenant's services are scheduled. That in turn
-# requires the enricher to manage ALB rules dynamically after scheduling — a
+# requires the control-plane controller to manage ALB rules dynamically after scheduling — a
 # larger architectural change tracked separately.
 
 resource "aws_lb_target_group" "traefik" {

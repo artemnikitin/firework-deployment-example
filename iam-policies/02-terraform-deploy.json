@@ -168,47 +168,11 @@
         "s3:ListBucketVersions"
       ],
       "Resource": [
-        "arn:aws:s3:::CONFIGS_BUCKET_NAME",
-        "arn:aws:s3:::CONFIGS_BUCKET_NAME/*",
-        "arn:aws:s3:::IMAGES_BUCKET_NAME",
-        "arn:aws:s3:::IMAGES_BUCKET_NAME/*",
+        "arn:aws:s3:::*-firework-*",
+        "arn:aws:s3:::*-firework-*/*",
         "arn:aws:s3:::*-alb-logs-*",
         "arn:aws:s3:::*-alb-logs-*/*"
       ]
-    },
-    {
-      "Sid": "Lambda",
-      "Effect": "Allow",
-      "Action": [
-        "lambda:CreateFunction",
-        "lambda:DeleteFunction",
-        "lambda:UpdateFunctionCode",
-        "lambda:UpdateFunctionConfiguration",
-        "lambda:PublishVersion",
-        "lambda:CreateAlias",
-        "lambda:DeleteAlias",
-        "lambda:AddPermission",
-        "lambda:RemovePermission",
-        "lambda:Get*",
-        "lambda:List*",
-        "lambda:TagResource",
-        "lambda:UntagResource"
-      ],
-      "Resource": "arn:aws:lambda:*:ACCOUNT_ID:function:*"
-    },
-    {
-      "Sid": "APIGateway",
-      "Effect": "Allow",
-      "Action": [
-        "apigateway:GET",
-        "apigateway:POST",
-        "apigateway:PUT",
-        "apigateway:PATCH",
-        "apigateway:DELETE",
-        "apigateway:TagResource",
-        "apigateway:UntagResource"
-      ],
-      "Resource": "arn:aws:apigateway:*::/*"
     },
     {
       "Sid": "IAM",
@@ -232,6 +196,7 @@
         "iam:AddRoleToInstanceProfile",
         "iam:RemoveRoleFromInstanceProfile",
         "iam:PassRole",
+        "iam:CreateServiceLinkedRole",
         "iam:CreatePolicy",
         "iam:DeletePolicy",
         "iam:CreatePolicyVersion",
@@ -247,11 +212,8 @@
         "ssm:Describe*",
         "ssm:Get*",
         "ssm:PutParameter",
-        "ssm:DeleteParameter",
-        "ssm:DeleteParameters",
-        "ssm:AddTagsToResource",
-        "ssm:RemoveTagsFromResource",
-        "ssm:ListTagsForResource",
+        "ssm:Delete*",
+        "ssm:*Tags*",
         "ssm:SendCommand"
       ],
       "Resource": "*"
@@ -283,27 +245,62 @@
       "Sid": "CloudWatchDashboards",
       "Effect": "Allow",
       "Action": [
-        "cloudwatch:PutDashboard",
-        "cloudwatch:GetDashboard",
-        "cloudwatch:DeleteDashboards",
-        "cloudwatch:ListDashboards"
+        "cloudwatch:*Dashboard*"
       ],
       "Resource": "*"
     },
     {
-      "Sid": "EventBridge",
+      "Sid": "ECS",
       "Effect": "Allow",
       "Action": [
-        "events:PutRule",
-        "events:DeleteRule",
-        "events:DescribeRule",
-        "events:ListRules",
-        "events:ListTargetsByRule",
-        "events:PutTargets",
-        "events:RemoveTargets",
-        "events:TagResource",
-        "events:UntagResource",
-        "events:ListTagsForResource"
+        "ecs:Create*",
+        "ecs:Delete*",
+        "ecs:Describe*",
+        "ecs:List*",
+        "ecs:Update*",
+        "ecs:TagResource",
+        "ecs:UntagResource",
+        "ecs:RegisterTaskDefinition",
+        "ecs:DeregisterTaskDefinition"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ECRAndRegistryAuth",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:GetAuthorizationToken"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "EFS",
+      "Effect": "Allow",
+      "Action": [
+        "elasticfilesystem:Create*",
+        "elasticfilesystem:Delete*",
+        "elasticfilesystem:Describe*",
+        "elasticfilesystem:TagResource",
+        "elasticfilesystem:UntagResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SecretsManager",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:CreateSecret",
+        "secretsmanager:DeleteSecret",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:GetResourcePolicy",
+        "secretsmanager:PutResourcePolicy",
+        "secretsmanager:DeleteResourcePolicy",
+        "secretsmanager:PutSecretValue",
+        "secretsmanager:UpdateSecret",
+        "secretsmanager:ListSecrets",
+        "secretsmanager:TagResource",
+        "secretsmanager:UntagResource"
       ],
       "Resource": "*"
     }

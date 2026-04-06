@@ -10,12 +10,12 @@ permissions:
   contents: read
 
 jobs:
-  terraform-infra:
-    name: "Terraform: infra"
+  terraform-data-plane:
+    name: "Terraform: data-plane"
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: terraform/infra
+        working-directory: terraform/data-plane
     steps:
       - uses: actions/checkout@v4
 
@@ -106,7 +106,7 @@ jobs:
         run: shellcheck packer/scripts/*.sh
 
       - name: ShellCheck user-data template
-        run: shellcheck terraform/infra/templates/user-data.sh.tpl
+        run: shellcheck terraform/data-plane/templates/user-data.sh.tpl
 
   security-scan:
     name: Security Scan (Trivy)
@@ -122,8 +122,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y trivy
 
-      - name: "Trivy: infra"
-        run: trivy config --severity HIGH,CRITICAL --exit-code 1 --ignorefile terraform/infra/.trivyignore terraform/infra/
+      - name: "Trivy: data-plane"
+        run: trivy config --severity HIGH,CRITICAL --exit-code 1 --ignorefile terraform/data-plane/.trivyignore terraform/data-plane/
 
       - name: "Trivy: control-plane"
         run: trivy config --severity HIGH,CRITICAL --exit-code 1 --ignorefile terraform/control-plane/.trivyignore terraform/control-plane/

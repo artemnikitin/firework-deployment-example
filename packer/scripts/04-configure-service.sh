@@ -12,7 +12,7 @@ sudo mkdir -p /etc/firework
 # which fills in node_name, s3_bucket, and s3_region.
 sudo tee /etc/firework/agent.yaml > /dev/null <<'EOF'
 # This file is overwritten by user data at instance launch.
-# See terraform/infra/templates/user-data.sh.tpl for the template.
+# See terraform/data-plane/templates/user-data.sh.tpl for the template.
 node_names:
   - "unconfigured"
 store_type: "s3"

@@ -2,6 +2,17 @@
 # IAM roles and instance profiles for EC2 nodes
 # -----------------------------------------------------------------------------
 
+locals {
+  node_configs_prefix_clean = trim(local.effective_s3_configs_prefix, "/")
+  node_configs_key_pattern  = local.node_configs_prefix_clean == "" ? "nodes/*" : "${local.node_configs_prefix_clean}/nodes/*"
+  node_configs_object_arn   = "${local.effective_s3_configs_bucket_arn}/${local.node_configs_key_pattern}"
+  node_secret_arns = distinct(compact([
+    local.effective_step_ca_root_ca_secret_arn,
+    local.effective_registry_client_ca_secret_arn,
+    local.effective_registry_bootstrap_token_secret_arn,
+  ]))
+}
+
 data "aws_iam_policy_document" "ec2_assume" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -26,12 +37,17 @@ data "aws_iam_policy_document" "node_s3_configs" {
       "s3:GetObject",
       "s3:HeadObject",
     ]
-    resources = ["${var.s3_configs_bucket_arn}/nodes/*"]
+    resources = [local.node_configs_object_arn]
   }
 
   statement {
     actions   = ["s3:ListBucket"]
-    resources = [var.s3_configs_bucket_arn]
+    resources = [local.effective_s3_configs_bucket_arn]
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = [local.node_configs_key_pattern]
+    }
   }
 }
 
@@ -109,6 +125,33 @@ resource "aws_iam_role_policy" "node_cloudwatch_metrics" {
   name_prefix = "cloudwatch-metrics-"
   role        = aws_iam_role.node.id
   policy      = data.aws_iam_policy_document.node_cloudwatch_metrics.json
+}
+
+data "aws_iam_policy_document" "node_secrets" {
+  count = length(local.node_secret_arns) > 0 ? 1 : 0
+
+  statement {
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = local.node_secret_arns
+  }
+
+  statement {
+    actions   = ["kms:Decrypt"]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["secretsmanager.${var.aws_region}.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "node_secrets" {
+  count = length(local.node_secret_arns) > 0 ? 1 : 0
+
+  name_prefix = "secrets-read-"
+  role        = aws_iam_role.node.id
+  policy      = data.aws_iam_policy_document.node_secrets[0].json
 }
 
 # Allow nodes to disable their own source/dest check at startup and to let
