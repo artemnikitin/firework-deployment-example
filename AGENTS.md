@@ -7,8 +7,8 @@ This is an example AWS deployment for Firework using Packer and Terraform. It is
 ## Layout
 
 - `packer/`: ARM64 Firework node AMI with Firecracker, kernel, agent, Traefik, and SSM.
-- `terraform/control-plane`: ECS/Fargate control-plane services, S3 state/config bucket, optional step-ca.
-- `terraform/data-plane`: VPC, ALB, Auto Scaling Group, node IAM/security groups.
+- `terraform/control-plane/`: ECS/Fargate control-plane services, S3 state/config bucket, optional step-ca.
+- `terraform/data-plane/`: VPC, ALB, Auto Scaling Group, node IAM/security groups.
 - `iam-policies/`: example IAM policies for CI/deploy users.
 - `scripts/push-agent-to-node.sh`: debug deploy of a local agent binary via SSM SSH tunnel.
 
