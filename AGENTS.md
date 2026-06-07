@@ -18,6 +18,8 @@ This is an example AWS deployment for Firework using Packer and Terraform. It is
 - Preserve deploy order: Packer AMI, control plane, then data plane.
 - Prefer examples and defaults that are explicit about demo-only assumptions.
 - Do not introduce secrets into tracked files; keep `*.tfvars` and Packer var files local.
+- When doing changes make sure that all the needed permissions are updated in `iam-policies/`.
+- Make sure to keep the permissions in `iam-policies/` files below 6144 characters per policy (this is AWS limit).
 
 ## Validation
 
@@ -30,5 +32,7 @@ Run from the relevant stack directory:
 - `packer fmt -check .`
 - `packer init . && packer validate .`
 - `shellcheck packer/scripts/*.sh terraform/data-plane/templates/user-data.sh.tpl`
+
+For CI-equivalent local validation run the logic/steps from `.github/workflows/ci.yaml`.
 
 Only run `terraform plan/apply/destroy`, `packer build`, AWS CLI mutations, or `scripts/push-agent-to-node.sh` when explicitly requested.
