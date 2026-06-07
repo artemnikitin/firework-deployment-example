@@ -24,14 +24,11 @@ resource "aws_lb" "main" {
 
 # --- Single target group for Traefik (port 8080 on each node) ---
 #
-# NOTE — multi-node routing limitation:
-# This target group includes ALL nodes. ALB picks a node round-robin, but each
-# node's Traefik only knows routes for services scheduled there.
-#
-# The full fix requires one target group per node and ALB listener rules mapping each tenant
-# hostname to the node where that tenant's services are scheduled. That in turn
-# requires the control-plane controller to manage ALB rules dynamically after scheduling — a
-# larger architectural change tracked separately.
+# The ALB round-robins across all nodes. Each node's Traefik handles both
+# locally-scheduled services (proxied to the VM guest IP) and remote services
+# (proxied to the peer node's host IP + forwarded port via remote-{service}.yaml
+# dynamic config files written by the agent). Any node can therefore serve any
+# request regardless of where the service is scheduled.
 
 resource "aws_lb_target_group" "traefik" {
   name_prefix = "trafk-"

@@ -191,15 +191,26 @@ From `firework-deployment-example/`, deploy a local binary to an existing node v
 Notes:
 - Requires SSH over SSM (`AWS-StartSSHSession`) and a valid node key pair.
 
-## Multi-node routing limitation
+## Multi-node routing
 
 The ALB uses a single target group containing all nodes. Traefik on each node
-only has routes for services scheduled to that node. 
+handles routing for both its own locally-scheduled services and services scheduled
+on peer nodes.
 
-The complete fix requires one ALB target group per node and listener rules that
-map each tenant hostname to the node where that service is scheduled. This
-means the control-plane controller must call ALB APIs after each scheduling cycle
-to update rules. This is a larger architectural change and it's not implemented yet.
+For remote services, the agent reads all rendered node configs from S3, and for
+each peer service that has a `metadata.host` and at least one `port_forwards` entry,
+it writes a `remote-{service}.yaml` Traefik dynamic config file that proxies requests
+to the peer node's host IP and forwarded port. Traefik watches the directory and picks
+up the change without a reload.
+
+This means a request that the ALB round-robins to any node will be correctly proxied
+to the node where the target service is actually scheduled.
+
+Remaining constraints:
+- Remote routing requires `host_ip` to be populated in the peer node's rendered config
+  (set automatically from the registry when nodes send heartbeats).
+- The remote service must have at least one `port_forwards` entry so the host-side port
+  is known.
 
 ## Destroy
 
