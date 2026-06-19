@@ -2,7 +2,7 @@
 set -euo pipefail
 echo "==> Installing Firecracker ${FIRECRACKER_VERSION}"
 
-ARCH="aarch64"
+ARCH="$(uname -m)"
 TARBALL="firecracker-v${FIRECRACKER_VERSION}-${ARCH}.tgz"
 URL="https://github.com/firecracker-microvm/firecracker/releases/download/v${FIRECRACKER_VERSION}/${TARBALL}"
 

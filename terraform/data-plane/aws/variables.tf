@@ -19,7 +19,7 @@ variable "use_control_plane_remote_state" {
 variable "control_plane_state_path" {
   description = "Path to control-plane terraform state file used for auto-wiring (relative to this stack when using local backend)."
   type        = string
-  default     = "../control-plane/terraform.tfstate"
+  default     = "../../control-plane/aws/terraform.tfstate"
 }
 
 variable "vpc_cidr" {
@@ -169,7 +169,7 @@ variable "use_packer_manifest_ami" {
 variable "packer_manifest_path" {
   description = "Path to Packer manifest.json used for AMI auto-resolution (relative to this stack when not absolute)."
   type        = string
-  default     = "../../packer/manifest.json"
+  default     = "../../../packer/aws/manifest.json"
 }
 
 variable "node_key_name" {

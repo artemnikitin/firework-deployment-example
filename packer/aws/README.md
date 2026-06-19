@@ -1,6 +1,6 @@
 # Firework Packer AMI Build
 
-This document covers building the Firework node AMI in `packer/`.
+This document covers building the Firework node AMI in `packer/aws/`.
 
 ## What this AMI contains
 
@@ -21,19 +21,19 @@ This document covers building the Firework node AMI in `packer/`.
 ## Quick Start
 
 ```bash
-cp firework-node.auto.pkrvars.hcl.example firework-node.auto.pkrvars.hcl
-# edit firework-node.auto.pkrvars.hcl
-packer init firework-node.pkr.hcl
+cp firework-node-aws.auto.pkrvars.hcl.example firework-node-aws.auto.pkrvars.hcl
+# edit firework-node-aws.auto.pkrvars.hcl
+packer init firework-node-aws.pkr.hcl
 packer build \
-  -var-file="firework-node.auto.pkrvars.hcl" \
-  firework-node.pkr.hcl
+  -var-file="firework-node-aws.auto.pkrvars.hcl" \
+  firework-node-aws.pkr.hcl
 ```
 
 The AMI ID is printed at the end of the build output.
 
 ## Agent Binary Download Behavior
 
-When `firework_agent_path` is empty, `scripts/03-install-agent.sh` downloads `firework-agent-linux-arm64` from GitHub Releases:
+When `firework_agent_path` is empty, `../scripts/03-install-agent.sh` downloads `firework-agent-linux-arm64` from GitHub Releases:
 
 - `firework_agent_version = "latest"` uses the latest release
 - `firework_agent_version = "1.2.3"` and `"v1.2.3"` both resolve to tag `v1.2.3`
@@ -51,8 +51,7 @@ After installation, the script verifies the binary by running:
 - For faster fail/debug cycles, run Packer with:
 
 ```bash
-packer build -on-error=abort firework-node.pkr.hcl
+packer build -on-error=abort firework-node-aws.pkr.hcl
 ```
 
 This skips cleanup waiting and leaves resources for inspection.
-

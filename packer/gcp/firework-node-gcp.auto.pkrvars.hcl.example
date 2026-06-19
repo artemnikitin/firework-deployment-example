@@ -1,0 +1,10 @@
+gcp_project        = "my-gcp-project"
+zone               = "us-central1-a"
+machine_type       = "n2-standard-2"
+firecracker_version = "1.12.0"
+traefik_version     = "3.3.4"
+
+# Optional local linux/amd64 agent binary. Otherwise a GitHub release is used.
+# firework_agent_path = "../../firework/bin/firework-agent-linux-amd64"
+firework_agent_version = "latest"
+# github_token = "..."

@@ -12,8 +12,8 @@ It creates:
 
 This stack depends on:
 
-- AMI from [packer/README.md](../../packer/README.md)
-- Config bucket outputs from [terraform/control-plane/README.md](../../terraform/control-plane/README.md)
+- AMI from [packer/aws/README.md](../../../packer/aws/README.md)
+- Config bucket outputs from [terraform/control-plane/aws/README.md](../../control-plane/aws/README.md)
 - Existing images bucket managed outside this stack
 
 ## Prerequisites
@@ -21,14 +21,14 @@ This stack depends on:
 - [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.5
 - AWS credentials with permissions for VPC, EC2, ALB, IAM
 - Control-plane stack already applied
-- By default, this stack auto-wires config/registry/step-ca values from `../control-plane/terraform.tfstate`
-  (`use_control_plane_remote_state = true`, `control_plane_state_path = "../control-plane/terraform.tfstate"`)
+- By default, this stack auto-wires config/registry/step-ca values from `../../control-plane/aws/terraform.tfstate`
+  (`use_control_plane_remote_state = true`, `control_plane_state_path = "../../control-plane/aws/terraform.tfstate"`)
   - If your control-plane state lives elsewhere, point `control_plane_state_path` to it or disable auto-wiring and set manual overrides.
   - For S3 config bucket values, auto-wired control-plane outputs are preferred over manual tfvars when present (to avoid stale overrides).
 - Existing S3 images bucket and ARN
 - Firework node AMI source (explicit ID, name pattern lookup, or Packer manifest)
 
-Apply order is strict: deploy `terraform/control-plane` first, then `terraform/data-plane`.
+Apply order is strict: deploy `terraform/control-plane/aws` first, then `terraform/data-plane/aws`.
 
 ## Minimal Input (quick start)
 
@@ -47,7 +47,7 @@ Node AMI is resolved in this priority order:
 
 1. `node_ami_id` (explicit override)
 2. `node_ami_name_pattern` (latest matching AMI in AWS)
-3. `packer_manifest_path` (latest AMI for `aws_region` from `packer/manifest.json` when `use_packer_manifest_ami = true`)
+3. `packer_manifest_path` (latest AMI for `aws_region` from `packer/aws/manifest.json` when `use_packer_manifest_ami = true`)
 
 Notes:
 

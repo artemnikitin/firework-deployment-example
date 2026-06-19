@@ -1,4 +1,4 @@
-# Copy this file to firework-node.auto.pkrvars.hcl and adjust as needed.
+# Copy this file to firework-node-aws.auto.pkrvars.hcl and adjust as needed.
 
 aws_region          = "us-east-1"
 instance_type       = "t4g.large"   # any ARM64 instance works — metal is only needed at runtime

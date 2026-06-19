@@ -14,7 +14,7 @@ domain_name = "example.com"
 # If your control-plane state is elsewhere, update control_plane_state_path or
 # set use_control_plane_remote_state = false and provide manual overrides below.
 use_control_plane_remote_state = true
-control_plane_state_path       = "../control-plane/terraform.tfstate"
+control_plane_state_path       = "../../control-plane/aws/terraform.tfstate"
 
 # Optional manual overrides (normally auto-wired from control-plane outputs):
 # Note: when control-plane outputs are present, they are preferred for
@@ -55,7 +55,7 @@ s3_images_bucket_arn = "arn:aws:s3:::your-images-bucket-name"
 #
 # Option C: latest AMI from local Packer manifest (enabled by default).
 # use_packer_manifest_ami = true
-# packer_manifest_path    = "../../packer/manifest.json"
+# packer_manifest_path    = "../../../packer/aws/manifest.json"
 
 node_key_name = "my-key-pair"
 
