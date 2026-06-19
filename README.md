@@ -47,7 +47,7 @@ flowchart LR
 
     S3Configs -->|poll configs| Node
     S3Images -->|download rootfs| Node
-    Node -->|AWS IID cert bootstrap (optional)| StepCANLB
+    Node -- "AWS IID cert bootstrap (optional)" --> StepCANLB
     Node -->|mTLS enroll/register/heartbeat| RegistryNLB
     ALB -->|tenant traffic| Node
   end
