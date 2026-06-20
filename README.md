@@ -71,6 +71,7 @@ flowchart LR
 - Deploy order matters: control-plane first, data-plane second.
 - Nodes are in private subnets; use AWS Session Manager for access — no SSH exposed.
 - ALB serves HTTPS (TLS 1.2/1.3); host-based routing per tenant is handled by Traefik on the nodes.
+- Each platform's domain variable is the single source of truth for DNS, the wildcard TLS certificate, and the agent `ingress_domain`. GitOps services set `metadata.subdomain: <label>` and resolve to `<subdomain>.<domain>` — `<subdomain>.<domain_name>` on AWS and `<subdomain>.<base_domain>` on GCP — so one provider-neutral GitOps tree serves both.
 - Optional step-ca service can issue short-lived node certs via AWS IID instead of static bootstrap tokens.
 - Observability is managed as code in Terraform (dashboards, logs, access logs, metric filters).
 

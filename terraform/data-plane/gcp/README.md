@@ -30,3 +30,17 @@ terraform apply
 
 Certificate Manager issuance commonly takes 15–60 minutes after DNS
 authorization propagates. Nodes have no external IP; use IAP for SSH.
+
+## Routing domain
+
+`base_domain` (for example `gcp.example.com`) is the single source of truth for
+the wildcard DNS record, the Certificate Manager wildcard certificate, and the
+agent's `ingress_domain`. The data plane passes `base_domain` into each node's
+`/etc/firework/agent.yaml` as `ingress_domain`, so a service whose GitOps
+metadata sets `subdomain: tenant-1` is served at `tenant-1.<base_domain>` (for
+example `tenant-1.gcp.example.com`).
+
+Because the wildcard certificate covers a single label (`*.<base_domain>`),
+`metadata.subdomain` must be exactly one label. Do not introduce a separate
+variable for the agent domain — a second value could drift from the domain used
+by DNS and TLS.

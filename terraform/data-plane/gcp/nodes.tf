@@ -47,6 +47,7 @@ resource "google_compute_instance_template" "node" {
     gcs_configs_bucket        = var.config_bucket_name
     gcs_configs_prefix        = var.config_prefix
     gcs_images_bucket         = google_storage_bucket.images.name
+    ingress_domain            = trimsuffix(var.base_domain, ".")
     vm_subnet                 = var.vm_subnet
     vm_gateway                = var.vm_gateway
     registry_url              = var.registry_url

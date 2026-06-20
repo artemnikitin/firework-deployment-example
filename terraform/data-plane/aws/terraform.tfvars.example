@@ -3,7 +3,9 @@
 aws_region   = "us-east-1"
 project_name = "firework-example"
 
-# Root domain for DNS records and the wildcard ACM certificate.
+# Root domain for DNS records and the wildcard ACM certificate. Also the single
+# source of truth for the agent ingress_domain: services route as
+# <subdomain>.<domain_name>.
 # A Route53 hosted zone for this domain must already exist in your account.
 domain_name = "example.com"
 

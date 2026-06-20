@@ -75,8 +75,8 @@ variable "target_branch" {
 
 variable "config_dir" {
   type        = string
-  default     = "gcp"
-  description = "GitOps repository subdirectory containing GCP hostname overlays"
+  default     = ""
+  description = "Optional GitOps repository subdirectory used as the enricher input root. Empty (default) consumes the repository root. GCP no longer uses a provider-specific hostname overlay directory; routing is deployment-neutral via the agent ingress_domain."
 }
 
 variable "node_stale_ttl" {

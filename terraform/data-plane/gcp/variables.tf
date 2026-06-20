@@ -19,7 +19,17 @@ variable "dns_zone_name" {
 
 variable "base_domain" {
   type        = string
-  description = "Tenant wildcard base domain, for example gcp.example.com"
+  description = "Tenant wildcard base domain, for example gcp.example.com. Single source of truth for wildcard DNS, the Certificate Manager wildcard certificate, and the agent ingress_domain. Routes resolve as <subdomain>.<base_domain>. Must be a canonical lowercase, multi-label DNS name with no trailing dot, scheme, port, path, or wildcard."
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$", var.base_domain))
+    error_message = "base_domain must be a canonical lowercase multi-label DNS name (e.g. gcp.example.com) with no trailing dot, scheme, port, path, or wildcard."
+  }
+
+  validation {
+    condition     = length(var.base_domain) <= 253
+    error_message = "base_domain must be at most 253 characters."
+  }
 }
 
 variable "network_cidr" {

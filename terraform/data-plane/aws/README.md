@@ -41,6 +41,15 @@ With control-plane auto-wiring enabled, the minimum required `terraform.tfvars` 
 
 `node_ami_id` is optional when one of these AMI auto-resolution paths is available.
 
+## Routing domain
+
+`domain_name` is the single source of truth for the wildcard ACM certificate and
+the agent's `ingress_domain`. The data plane passes `domain_name` into each
+node's `/etc/firework/agent.yaml` as `ingress_domain`, so a service whose GitOps
+metadata sets `subdomain: tenant-1` is served at `tenant-1.<domain_name>`. The
+wildcard certificate covers a single label (`*.<domain_name>`), so
+`metadata.subdomain` must be exactly one label.
+
 ## Node AMI resolution
 
 Node AMI is resolved in this priority order:

@@ -52,3 +52,19 @@ terraform apply
 The ACME certificate and all generated private material are present in
 Terraform state. Protect the backend accordingly. Re-apply before the events
 certificate expires and recreate the events VM so the process reloads it.
+
+## GitOps input root
+
+GCP consumes the GitOps repository **root** as the enricher input. `config_dir`
+defaults to `""` (the root) and no longer points at a provider-specific `gcp/`
+hostname overlay — public routing is deployment-neutral via the agent
+`ingress_domain` (derived from the data-plane `base_domain`).
+
+Changing `config_dir` updates instance metadata but does not rewrite the running
+events VM's `/etc/firework/controlplane.yaml`. After Terraform installs the new
+startup-script metadata, restart or recreate the **events** VM so the startup
+script rewrites the config and systemd loads `config_dir: ""`; a service restart
+alone is insufficient if the file was not rewritten first. Inspect the plan to
+avoid unnecessary registry/controller VM replacement. Because GCP does not set
+`reconcile_on_start`, trigger a GitHub push/redelivery afterward — a process
+restart by itself does not publish a new desired revision.

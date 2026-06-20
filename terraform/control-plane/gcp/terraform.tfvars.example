@@ -8,4 +8,8 @@ state_bucket_name = "firework-cp-state-my-gcp-project"
 firework_controlplane_path = "../../../../firework/bin/firework-controlplane-linux-amd64"
 git_repo_url      = "https://github.com/OWNER/firework-gitops-example.git"
 target_branch     = "main"
-config_dir        = "gcp"
+# config_dir selects an optional GitOps subdirectory as the enricher input root.
+# Leave empty (the default) to consume the repository root. GCP no longer uses a
+# provider-specific hostname overlay; routing is deployment-neutral via the agent
+# ingress_domain (derived from the data-plane base_domain).
+config_dir        = ""
