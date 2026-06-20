@@ -4,10 +4,25 @@ resource "google_compute_network" "control_plane" {
 }
 
 resource "google_compute_subnetwork" "control_plane" {
-  name          = "${local.name_prefix}-subnet"
-  region        = var.gcp_region
-  network       = google_compute_network.control_plane.id
-  ip_cidr_range = var.network_cidr
+  name                     = "${local.name_prefix}-subnet"
+  region                   = var.gcp_region
+  network                  = google_compute_network.control_plane.id
+  ip_cidr_range            = var.network_cidr
+  private_ip_google_access = true
+}
+
+resource "google_compute_router" "control_plane" {
+  name    = "${local.name_prefix}-router"
+  region  = var.gcp_region
+  network = google_compute_network.control_plane.id
+}
+
+resource "google_compute_router_nat" "control_plane" {
+  name                               = "${local.name_prefix}-nat"
+  router                             = google_compute_router.control_plane.name
+  region                             = var.gcp_region
+  nat_ip_allocate_option             = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
 }
 
 resource "google_compute_firewall" "public_endpoints" {

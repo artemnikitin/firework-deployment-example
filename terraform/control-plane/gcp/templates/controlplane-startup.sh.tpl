@@ -5,7 +5,7 @@ umask 077
 
 ROLE="${role}"
 PROJECT="${gcp_project}"
-CP_VERSION="${firework_controlplane_version}"
+CONTROLPLANE_BINARY_URI="${controlplane_binary_uri}"
 
 apt-get update -y
 apt-get install -y --no-install-recommends curl jq ca-certificates
@@ -13,11 +13,7 @@ curl -sSO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
 bash add-google-cloud-ops-agent-repo.sh --also-install
 rm -f add-google-cloud-ops-agent-repo.sh
 
-if [ "$CP_VERSION" = "latest" ]; then
-  CP_VERSION=$(curl -fsSL https://api.github.com/repos/artemnikitin/firework/releases/latest | jq -r .tag_name)
-fi
-curl -fsSL "https://github.com/artemnikitin/firework/releases/download/$CP_VERSION/firework-controlplane-linux-amd64" \
-  -o /usr/local/bin/firework-controlplane
+gcloud storage cp "$CONTROLPLANE_BINARY_URI" /usr/local/bin/firework-controlplane
 chmod 0755 /usr/local/bin/firework-controlplane
 
 mkdir -p /etc/firework/tls

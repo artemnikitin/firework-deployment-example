@@ -3,7 +3,8 @@
 This stack creates separate events, registry, and controller Compute Engine
 VMs. Events and registry use regional external passthrough Network Load
 Balancers so TLS reaches the Go processes unchanged. State and rendered node
-configs use native GCS.
+configs use native GCS. The VMs have no external IPs and use Cloud NAT for
+outbound package and artifact downloads.
 
 Before initialization:
 
@@ -15,6 +16,8 @@ Before initialization:
    Firework state/config bucket.
 4. Grant the Terraform service account DNS Admin and Service Account User for
    the runtime service accounts.
+5. Build the Linux AMD64 control-plane binary. Terraform uploads this exact
+   binary to the private control-plane GCS bucket before creating the VMs.
 
 Enable the required APIs in a clean project:
 
@@ -32,7 +35,12 @@ Create the Cloud DNS zone once and copy its exact assigned nameservers into
 hardcoded. Verify delegation with `dig NS gcp.example.com +short`.
 
 ```bash
-cd terraform/control-plane/gcp
+# From the shared parent directory containing both repositories:
+make -C firework build-linux-amd64
+```
+
+```bash
+cd firework-deployment-example/terraform/control-plane/gcp
 cp terraform.tfvars.example terraform.tfvars
 terraform init \
   -backend-config="bucket=firework-tfstate-YOUR_PROJECT" \

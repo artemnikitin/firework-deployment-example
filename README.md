@@ -75,10 +75,10 @@ flowchart LR
 - Observability is managed as code in Terraform (dashboards, logs, access logs, metric filters).
 
 For GCP, the control-plane roles run on separate Compute Engine VMs behind
-passthrough Network Load Balancers. The x86_64 data plane is a private managed
-instance group using nested virtualization, Cloud NAT, GCS, and a global HTTPS
-load balancer to Traefik. See the GCP guides above for DNS delegation and TLS
-prerequisites.
+passthrough Network Load Balancers. Both planes use private VMs with Cloud NAT;
+the x86_64 data plane is a managed instance group using nested virtualization,
+GCS, and a global HTTPS load balancer to Traefik. See the GCP guides above for
+binary, DNS delegation, and TLS prerequisites.
 
 ## Cleanup
 

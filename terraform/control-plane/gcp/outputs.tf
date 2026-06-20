@@ -7,7 +7,7 @@ output "config_prefix" {
 }
 
 output "events_webhook_url" {
-  value = "https://${trimsuffix(var.events_domain, ".")}/"
+  value = "https://${trimsuffix(var.events_domain, ".")}/v1/events/github"
 }
 
 output "registry_url" {

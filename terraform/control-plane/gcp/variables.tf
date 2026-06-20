@@ -58,10 +58,9 @@ variable "machine_type" {
   default = "e2-small"
 }
 
-variable "firework_controlplane_version" {
+variable "firework_controlplane_path" {
   type        = string
-  default     = "latest"
-  description = "GitHub release tag or latest"
+  description = "Path to a locally built linux/amd64 firework-controlplane binary uploaded to GCS by Terraform"
 }
 
 variable "git_repo_url" {
@@ -71,7 +70,7 @@ variable "git_repo_url" {
 
 variable "target_branch" {
   type    = string
-  default = "gcp"
+  default = "main"
 }
 
 variable "config_dir" {
