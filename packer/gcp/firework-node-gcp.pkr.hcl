@@ -11,6 +11,12 @@ variable "gcp_project" {
   type = string
 }
 
+variable "impersonate_service_account" {
+  type        = string
+  default     = ""
+  description = "Optional service account email for Packer to impersonate (e.g. firework-infra@PROJECT.iam.gserviceaccount.com). Requires roles/iam.serviceAccountTokenCreator on it for the base ADC identity."
+}
+
 variable "zone" {
   type    = string
   default = "us-central1-a"
@@ -78,6 +84,8 @@ source "googlecompute" "firework_node" {
   disk_type    = "pd-ssd"
   ssh_username = "packer"
   use_os_login = true
+
+  impersonate_service_account = var.impersonate_service_account
 }
 
 build {
