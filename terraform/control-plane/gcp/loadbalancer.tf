@@ -24,7 +24,8 @@ resource "google_compute_region_backend_service" "events" {
   health_checks         = [google_compute_region_health_check.events.id]
 
   backend {
-    group = google_compute_instance_group.events.id
+    group          = google_compute_instance_group.events.id
+    balancing_mode = "CONNECTION"
   }
 }
 
@@ -36,7 +37,8 @@ resource "google_compute_region_backend_service" "registry" {
   health_checks         = [google_compute_region_health_check.registry.id]
 
   backend {
-    group = google_compute_instance_group.registry.id
+    group          = google_compute_instance_group.registry.id
+    balancing_mode = "CONNECTION"
   }
 }
 

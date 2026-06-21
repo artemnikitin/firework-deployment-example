@@ -2,6 +2,10 @@ resource "google_service_account" "role" {
   for_each     = toset(["events", "registry", "controller"])
   account_id   = "firework-${each.key}"
   display_name = "Firework ${each.key}"
+
+  # Service accounts and the downstream project IAM members that reference them
+  # require the IAM and Cloud Resource Manager APIs to be enabled first.
+  depends_on = [google_project_service.required]
 }
 
 resource "google_storage_bucket_iam_member" "state_object_admin" {

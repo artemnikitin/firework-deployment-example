@@ -34,9 +34,21 @@ variable "acme_server_url" {
   default = "https://acme-v02.api.letsencrypt.org/directory"
 }
 
+variable "acme_recursive_nameservers" {
+  type        = list(string)
+  description = "Resolvers (host:port) used for the ACME DNS-01 propagation pre-check, bypassing the operator's local/system resolver. Set to [] to use the system resolver."
+  default     = ["8.8.8.8:53", "1.1.1.1:53"]
+}
+
 variable "state_bucket_name" {
   type        = string
   description = "Globally unique GCS bucket for Firework control-plane state/configs"
+}
+
+variable "state_bucket_force_destroy" {
+  type        = bool
+  description = "Allow `terraform destroy` to delete the state/config bucket even when it still contains objects (including noncurrent versions). Keep false in normal operation; set true only to tear the stack down."
+  default     = false
 }
 
 variable "state_prefix" {

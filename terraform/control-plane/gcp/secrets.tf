@@ -1,11 +1,15 @@
 resource "google_compute_address" "events" {
   name   = "${local.name_prefix}-events-ip"
   region = var.gcp_region
+
+  depends_on = [google_project_service.required]
 }
 
 resource "google_compute_address" "registry" {
   name   = "${local.name_prefix}-registry-ip"
   region = var.gcp_region
+
+  depends_on = [google_project_service.required]
 }
 
 resource "random_password" "webhook_secret" {
@@ -79,6 +83,11 @@ resource "acme_certificate" "events" {
       GCE_PROPAGATION_TIMEOUT = "180"
     }
   }
+
+  # Check DNS-01 propagation against public resolvers instead of the operator's
+  # local/system resolver, which may be slow or unreachable and otherwise causes
+  # "propagation: time limit exceeded ... i/o timeout" failures.
+  recursive_nameservers = var.acme_recursive_nameservers
 }
 
 locals {
@@ -103,6 +112,8 @@ resource "google_secret_manager_secret" "control_plane" {
   }
 
   labels = local.common_labels
+
+  depends_on = [google_project_service.required]
 }
 
 resource "google_secret_manager_secret_version" "control_plane" {

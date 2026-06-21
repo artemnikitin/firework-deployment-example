@@ -1,6 +1,8 @@
 resource "google_compute_network" "control_plane" {
   name                    = "${local.name_prefix}-vpc"
   auto_create_subnetworks = false
+
+  depends_on = [google_project_service.required]
 }
 
 resource "google_compute_subnetwork" "control_plane" {
