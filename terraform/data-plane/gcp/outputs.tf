@@ -1,5 +1,5 @@
 output "gcs_images_bucket_name" {
-  value = google_storage_bucket.images.name
+  value = var.images_bucket_name
 }
 
 output "tenant_load_balancer_ip" {

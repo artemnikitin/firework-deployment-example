@@ -3,6 +3,7 @@ resource "google_project_service" "required" {
     "cloudresourcemanager.googleapis.com",
     "serviceusage.googleapis.com",
     "compute.googleapis.com",
+    "container.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
     "iap.googleapis.com",

@@ -11,17 +11,22 @@ output "events_webhook_url" {
 }
 
 output "registry_url" {
-  value = "https://${google_compute_address.registry.address}:9443"
+  value = var.base_domain != "" ? "https://registry.${trimsuffix(var.base_domain, ".")}:9443" : "https://${google_compute_address.registry.address}:9443"
 }
 
 output "registry_server_name" {
-  value = google_compute_address.registry.address
+  value = var.base_domain != "" ? "registry.${trimsuffix(var.base_domain, ".")}" : google_compute_address.registry.address
 }
 
 output "registry_ca_secret_id" {
-  value = google_secret_manager_secret.control_plane["enrollment-ca-cert"].secret_id
+  value = var.enrollment_ca_cert_secret_id
 }
 
 output "registry_bootstrap_token_secret_id" {
-  value = google_secret_manager_secret.control_plane["registry-bootstrap"].secret_id
+  value = var.bootstrap_token_secret_id
+}
+
+output "webhook_secret_id" {
+  value       = var.webhook_secret_id
+  description = "Secret Manager secret ID holding the GitHub webhook secret. Retrieve the value with: gcloud secrets versions access latest --secret=$WEBHOOK_SECRET_ID"
 }

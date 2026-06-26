@@ -75,20 +75,20 @@ flowchart LR
 - Optional step-ca service can issue short-lived node certs via AWS IID instead of static bootstrap tokens.
 - Observability is managed as code in Terraform (dashboards, logs, access logs, metric filters).
 
-For GCP, the control-plane roles run on separate Compute Engine VMs behind
-passthrough Network Load Balancers. Both planes use private VMs with Cloud NAT;
-the x86_64 data plane is a managed instance group using nested virtualization,
-GCS, and a global HTTPS load balancer to Traefik. See the GCP guides above for
-binary, DNS delegation, and TLS prerequisites.
+For GCP, the control-plane roles run as GKE Autopilot workloads (Deployments + LoadBalancer Services), with secrets delivered via the Secrets Store CSI driver from Secret Manager and Workload Identity for authentication. Both planes use private VMs/nodes with Cloud NAT; the x86_64 data plane is a regional managed instance group using nested virtualization, GCS, and a global HTTPS load balancer to Traefik. See the GCP guides above for container image, DNS delegation, and TLS prerequisites.
 
 ## Cleanup
 
-Destroy each provider in reverse order:
+Destroy each provider in reverse order. AWS stacks can be destroyed in a single step. **GCP requires two steps for the control-plane** because the state bucket has versioning enabled and `force_destroy` defaults to `false`:
 
 ```bash
+# AWS
 cd terraform/data-plane/aws && terraform destroy
 cd ../../control-plane/aws && terraform destroy
 
+# GCP — unlock the state bucket first, then destroy
 cd terraform/data-plane/gcp && terraform destroy
-cd ../../control-plane/gcp && terraform destroy
+cd ../../control-plane/gcp
+terraform apply -var='state_bucket_force_destroy=true' -target=google_storage_bucket.state
+terraform destroy -var='state_bucket_force_destroy=true'
 ```

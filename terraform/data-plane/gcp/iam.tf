@@ -1,30 +1,30 @@
 resource "google_service_account" "node" {
-  account_id   = "firework-node"
+  account_id   = "${local.name_prefix}-sa"
   display_name = "Firework node"
 }
 
 resource "google_storage_bucket_iam_member" "images_reader" {
-  bucket = google_storage_bucket.images.name
+  bucket = var.images_bucket_name
   role   = "roles/storage.objectViewer"
   member = "serviceAccount:${google_service_account.node.email}"
 }
 
 resource "google_storage_bucket_iam_member" "configs_reader" {
-  bucket = var.config_bucket_name
+  bucket = local.effective_config_bucket_name
   role   = "roles/storage.objectViewer"
   member = "serviceAccount:${google_service_account.node.email}"
 }
 
 resource "google_secret_manager_secret_iam_member" "registry_ca" {
   project   = var.gcp_project
-  secret_id = var.registry_ca_secret_id
+  secret_id = local.effective_registry_ca_secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.node.email}"
 }
 
 resource "google_secret_manager_secret_iam_member" "bootstrap_token" {
   project   = var.gcp_project
-  secret_id = var.registry_bootstrap_token_secret_id
+  secret_id = local.effective_registry_bootstrap_token_secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.node.email}"
 }

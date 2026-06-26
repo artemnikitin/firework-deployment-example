@@ -1,15 +1,30 @@
-gcp_project      = "my-gcp-project"
-gcp_region       = "us-central1"
-gcp_zone         = "us-central1-a"
-dns_zone_name    = "firework-gcp"
-events_domain    = "events.gcp.example.com"
-acme_email       = "operator@example.com"
-state_bucket_name = "firework-cp-state-my-gcp-project"
-firework_controlplane_path = "../../../../firework/bin/firework-controlplane-linux-amd64"
-git_repo_url      = "https://github.com/OWNER/firework-gitops-example.git"
-target_branch     = "main"
+gcp_project        = "my-gcp-project"
+gcp_region         = "us-central1"
+dns_zone_name      = "firework-gcp"
+events_domain      = "events.gcp.example.com"
+# Optional: set to create a DNS A record for registry.<base_domain> and emit
+# a DNS-based registry_url/registry_server_name. The operator must provision
+# the registry TLS cert with a DNS SAN matching registry.<base_domain>.
+# base_domain = "gcp.example.com"
+state_bucket_name  = "firework-cp-state-my-gcp-project"
+controlplane_image = "ghcr.io/artemnikitin/firework-controlplane:v1.2.3"
+git_repo_url       = "https://github.com/OWNER/firework-gitops-example.git"
+target_branch      = "main"
 # config_dir selects an optional GitOps subdirectory as the enricher input root.
-# Leave empty (the default) to consume the repository root. GCP no longer uses a
-# provider-specific hostname overlay; routing is deployment-neutral via the agent
-# ingress_domain (derived from the data-plane base_domain).
-config_dir        = ""
+# Leave empty (the default) to consume the repository root.
+config_dir = ""
+
+# --- Secret Manager secret IDs ---
+# Create these secrets in Secret Manager before running terraform apply.
+# Example: gcloud secrets create firework-webhook-secret --replication-policy=automatic
+webhook_secret_id            = "firework-webhook-secret"
+bootstrap_token_secret_id    = "firework-bootstrap-token"
+events_tls_cert_secret_id    = "firework-events-tls-cert"
+events_tls_key_secret_id     = "firework-events-tls-key"
+registry_tls_cert_secret_id  = "firework-registry-tls-cert"
+registry_tls_key_secret_id   = "firework-registry-tls-key"
+enrollment_ca_cert_secret_id = "firework-enrollment-ca-cert"
+enrollment_ca_key_secret_id  = "firework-enrollment-ca-key"
+# Optional: set to a Secret Manager secret ID containing a GitHub token
+# for private GitOps repositories.
+# github_token_secret_id = "firework-github-token"

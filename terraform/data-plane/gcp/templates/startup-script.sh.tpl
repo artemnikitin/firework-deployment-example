@@ -16,7 +16,7 @@ mkdir -p /etc/firework/pki /var/lib/images /var/lib/firework /etc/traefik/dynami
 read_secret "${registry_ca_secret}" > /etc/firework/pki/node-ca.crt
 REGISTRY_BOOTSTRAP_TOKEN=$(read_secret "${registry_bootstrap_secret}")
 
-gcloud storage rsync --recursive "gs://${gcs_images_bucket}/" /var/lib/images/
+gcloud storage rsync --recursive --include="*.ext4" "gs://${gcs_images_bucket}/" /var/lib/images/
 
 cat > /etc/firework/agent.yaml <<EOF
 node_id: "$INSTANCE_NAME"

@@ -44,14 +44,14 @@ resource "google_compute_instance_template" "node" {
 
   metadata_startup_script = templatefile("${path.module}/templates/startup-script.sh.tpl", {
     gcp_project               = var.gcp_project
-    gcs_configs_bucket        = var.config_bucket_name
-    gcs_configs_prefix        = var.config_prefix
-    gcs_images_bucket         = google_storage_bucket.images.name
+    gcs_configs_bucket        = local.effective_config_bucket_name
+    gcs_configs_prefix        = local.effective_config_prefix
+    gcs_images_bucket         = var.images_bucket_name
     ingress_domain            = trimsuffix(var.base_domain, ".")
     vm_subnet                 = var.vm_subnet
     vm_gateway                = var.vm_gateway
-    registry_url              = var.registry_url
-    registry_server_name      = var.registry_server_name
+    registry_url              = local.effective_registry_url
+    registry_server_name      = local.effective_registry_server_name
     registry_ca_secret        = data.google_secret_manager_secret.registry_ca.secret_id
     registry_bootstrap_secret = data.google_secret_manager_secret.bootstrap_token.secret_id
   })
@@ -77,11 +77,17 @@ resource "google_compute_health_check" "node" {
   }
 }
 
-resource "google_compute_instance_group_manager" "nodes" {
-  name               = "firework-nodes"
-  zone               = var.gcp_zone
-  base_instance_name = "firework-node"
+resource "google_compute_region_instance_group_manager" "nodes" {
+  name               = "${local.name_prefix}-nodes"
+  region             = var.gcp_region
+  base_instance_name = "${local.name_prefix}-node"
   target_size        = var.node_count
+
+  distribution_policy_zones = [
+    "${var.gcp_region}-a",
+    "${var.gcp_region}-b",
+    "${var.gcp_region}-c",
+  ]
 
   version {
     instance_template = google_compute_instance_template.node.id
@@ -98,9 +104,10 @@ resource "google_compute_instance_group_manager" "nodes" {
   }
 
   update_policy {
-    type                  = "PROACTIVE"
-    minimal_action        = "REPLACE"
-    max_surge_fixed       = 1
-    max_unavailable_fixed = 0
+    type                         = "PROACTIVE"
+    minimal_action               = "REPLACE"
+    max_surge_fixed              = 1
+    max_unavailable_fixed        = 0
+    instance_redistribution_type = "PROACTIVE"
   }
 }

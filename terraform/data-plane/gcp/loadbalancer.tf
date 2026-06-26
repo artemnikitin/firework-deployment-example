@@ -2,6 +2,30 @@ resource "google_compute_global_address" "tenant" {
   name = "firework-tenant-ip"
 }
 
+# HTTP-to-HTTPS redirect (port 80 → 301 to HTTPS)
+resource "google_compute_url_map" "http_redirect" {
+  name = "firework-tenant-http-redirect"
+
+  default_url_redirect {
+    https_redirect         = true
+    redirect_response_code = "MOVED_PERMANENTLY_DEFAULT"
+    strip_query            = false
+  }
+}
+
+resource "google_compute_target_http_proxy" "redirect" {
+  name    = "firework-tenant-http-redirect"
+  url_map = google_compute_url_map.http_redirect.id
+}
+
+resource "google_compute_global_forwarding_rule" "tenant_http" {
+  name                  = "firework-tenant-http"
+  ip_address            = google_compute_global_address.tenant.id
+  port_range            = "80"
+  target                = google_compute_target_http_proxy.redirect.id
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+}
+
 resource "google_compute_backend_service" "traefik" {
   name                  = "firework-traefik"
   protocol              = "HTTP"
@@ -11,7 +35,7 @@ resource "google_compute_backend_service" "traefik" {
   health_checks         = [google_compute_health_check.node.id]
 
   backend {
-    group           = google_compute_instance_group_manager.nodes.instance_group
+    group           = google_compute_region_instance_group_manager.nodes.instance_group
     balancing_mode  = "UTILIZATION"
     capacity_scaler = 1.0
   }

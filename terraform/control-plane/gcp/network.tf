@@ -11,6 +11,16 @@ resource "google_compute_subnetwork" "control_plane" {
   network                  = google_compute_network.control_plane.id
   ip_cidr_range            = var.network_cidr
   private_ip_google_access = true
+
+  secondary_ip_range {
+    range_name    = "pods"
+    ip_cidr_range = "10.21.0.0/20"
+  }
+
+  secondary_ip_range {
+    range_name    = "services"
+    ip_cidr_range = "10.22.0.0/24"
+  }
 }
 
 resource "google_compute_router" "control_plane" {
@@ -27,54 +37,18 @@ resource "google_compute_router_nat" "control_plane" {
   source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
 }
 
-resource "google_compute_firewall" "public_endpoints" {
-  name    = "${local.name_prefix}-public-endpoints"
-  network = google_compute_network.control_plane.name
+# Static external IPs for the events and registry Kubernetes LoadBalancer Services.
+# GKE manages the underlying firewall rules for LoadBalancer-type Services.
+resource "google_compute_address" "events" {
+  name   = "${local.name_prefix}-events-ip"
+  region = var.gcp_region
 
-  allow {
-    protocol = "tcp"
-    ports    = ["443", "9443"]
-  }
-
-  source_ranges = ["0.0.0.0/0"]
-  target_tags   = ["firework-control-plane"]
+  depends_on = [google_project_service.required]
 }
 
-resource "google_compute_firewall" "health_checks" {
-  name    = "${local.name_prefix}-health-checks"
-  network = google_compute_network.control_plane.name
+resource "google_compute_address" "registry" {
+  name   = "${local.name_prefix}-registry-ip"
+  region = var.gcp_region
 
-  allow {
-    protocol = "tcp"
-    ports    = ["443", "9443"]
-  }
-
-  source_ranges = ["35.191.0.0/16", "130.211.0.0/22", "209.85.152.0/22", "209.85.204.0/22"]
-  target_tags   = ["firework-control-plane"]
-}
-
-resource "google_compute_firewall" "iap_ssh" {
-  name    = "${local.name_prefix}-iap-ssh"
-  network = google_compute_network.control_plane.name
-
-  allow {
-    protocol = "tcp"
-    ports    = ["22"]
-  }
-
-  source_ranges = ["35.235.240.0/20"]
-  target_tags   = ["firework-control-plane"]
-}
-
-resource "google_compute_firewall" "internal" {
-  name    = "${local.name_prefix}-internal"
-  network = google_compute_network.control_plane.name
-
-  allow {
-    protocol = "tcp"
-    ports    = ["0-65535"]
-  }
-
-  source_ranges = [var.network_cidr]
-  target_tags   = ["firework-control-plane"]
+  depends_on = [google_project_service.required]
 }

@@ -7,6 +7,12 @@ variable "gcp_region" {
   default = "us-central1"
 }
 
+variable "deployment_name" {
+  type        = string
+  default     = "firework"
+  description = "Deployment scoping prefix for all resource names. Must match the control-plane stack's deployment_name."
+}
+
 variable "gcp_zone" {
   type    = string
   default = "us-central1-a"
@@ -64,38 +70,60 @@ variable "node_image_project" {
   description = "Project containing the Packer image; defaults to gcp_project"
 }
 
+variable "use_control_plane_remote_state" {
+  type        = bool
+  default     = true
+  description = "When true, auto-wire config_bucket_name, registry_url, and secret IDs from the control-plane Terraform state file."
+}
+
+variable "control_plane_state_path" {
+  type        = string
+  default     = "../../control-plane/gcp/terraform.tfstate"
+  description = "Path to the control-plane terraform.tfstate (absolute or relative to this module). Used when use_control_plane_remote_state is true."
+}
+
 variable "config_bucket_name" {
-  type = string
+  type        = string
+  default     = ""
+  description = "GCS bucket for Firework control-plane config. Auto-filled from control-plane state when use_control_plane_remote_state is true."
 }
 
 variable "config_prefix" {
   type    = string
   default = "cp/v1/"
   validation {
-    condition     = endswith(var.config_prefix, "/")
+    condition     = var.config_prefix == "" || endswith(var.config_prefix, "/")
     error_message = "config_prefix must end with '/'."
   }
 }
 
 variable "images_bucket_name" {
   type        = string
-  description = "Globally unique amd64 images bucket name"
+  description = "Globally unique amd64 images bucket name (created by the images-infra stack)"
 }
 
 variable "registry_url" {
-  type = string
+  type        = string
+  default     = ""
+  description = "Firework registry HTTPS URL. Auto-filled from control-plane state when use_control_plane_remote_state is true."
 }
 
 variable "registry_server_name" {
-  type = string
+  type        = string
+  default     = ""
+  description = "TLS server name for the registry. Auto-filled from control-plane state when use_control_plane_remote_state is true."
 }
 
 variable "registry_ca_secret_id" {
-  type = string
+  type        = string
+  default     = ""
+  description = "Secret Manager secret ID for the enrollment CA cert. Auto-filled from control-plane state when use_control_plane_remote_state is true."
 }
 
 variable "registry_bootstrap_token_secret_id" {
-  type = string
+  type        = string
+  default     = ""
+  description = "Secret Manager secret ID for the node bootstrap token. Auto-filled from control-plane state when use_control_plane_remote_state is true."
 }
 
 variable "vm_subnet" {
@@ -106,4 +134,10 @@ variable "vm_subnet" {
 variable "vm_gateway" {
   type    = string
   default = "172.16.0.1"
+}
+
+variable "observability_log_retention_days" {
+  type        = number
+  default     = 30
+  description = "Days before log archives (node logs and LB access logs) are deleted."
 }
