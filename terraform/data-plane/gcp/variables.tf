@@ -13,10 +13,6 @@ variable "deployment_name" {
   description = "Deployment scoping prefix for all resource names. Must match the control-plane stack's deployment_name."
 }
 
-variable "gcp_zone" {
-  type    = string
-  default = "us-central1-a"
-}
 
 variable "dns_zone_name" {
   type    = string

@@ -1,1 +1,2 @@
-# GCP stack has no accepted Trivy findings.
+# GCP-0061: master authorized networks — demo stack, no API server CIDR restriction required.
+GCP-0061

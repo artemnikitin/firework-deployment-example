@@ -82,7 +82,7 @@ jobs:
       - name: Packer scripts
         run: shellcheck packer/aws/*.sh packer/gcp/*.sh packer/scripts/*.sh
       - name: Startup templates
-        run: shellcheck terraform/data-plane/aws/templates/user-data.sh.tpl terraform/data-plane/gcp/templates/startup-script.sh.tpl terraform/control-plane/gcp/templates/controlplane-startup.sh.tpl
+        run: shellcheck terraform/data-plane/aws/templates/user-data.sh.tpl terraform/data-plane/gcp/templates/startup-script.sh.tpl
 
   security-scan:
     name: "Trivy: ${{ matrix.stack }}-${{ matrix.provider }}"

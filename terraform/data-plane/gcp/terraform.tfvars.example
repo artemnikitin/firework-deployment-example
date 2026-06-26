@@ -1,7 +1,6 @@
-gcp_project       = "my-gcp-project"
-gcp_region        = "us-central1"
-gcp_zone          = "us-central1-a"
-dns_zone_name     = "firework-gcp"
+gcp_project   = "my-gcp-project"
+gcp_region    = "us-central1"
+dns_zone_name = "firework-gcp"
 # Single source of truth for wildcard DNS, the wildcard TLS certificate, and the
 # agent ingress_domain. Services route as <subdomain>.<base_domain>.
 base_domain       = "gcp.example.com"
