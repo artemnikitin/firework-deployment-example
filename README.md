@@ -1,6 +1,6 @@
 # Firework Deployment Example
 
-> **Not production-ready.** This is an example deployment intended for demonstration and learning purposes only. It is not hardened, audited, etc.
+> This is an example deployment intended for demonstration and learning purposes only. It is not hardened, audited, etc.
 
 Example deployment of [Firework](https://github.com/artemnikitin/firework) on AWS using Packer (for building AMI) + Terraform.
 
