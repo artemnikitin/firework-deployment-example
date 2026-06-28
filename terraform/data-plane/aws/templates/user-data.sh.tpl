@@ -33,6 +33,7 @@ CW_AGENT_LOG_GROUP_NAME="${cw_agent_log_group_name}"
 CW_FIRECRACKER_LOG_GROUP="${cw_firecracker_log_group}"
 CW_METRIC_NAMESPACE="${cw_metric_namespace}"
 TRAEFIK_CONFIG_DIR="${traefik_config_dir}"
+INGRESS_DOMAIN="${ingress_domain}"
 REGISTRY_CA_FILE="/etc/firework/pki/node-ca.crt"
 REGISTRY_CERT_FILE="/etc/firework/pki/node.crt"
 REGISTRY_KEY_FILE="/etc/firework/pki/node.key"
@@ -281,6 +282,7 @@ vm_subnet: "$VM_SUBNET"
 vm_gateway: "$VM_GATEWAY"
 out_interface: "$PRIMARY_IF"
 traefik_config_dir: "$TRAEFIK_CONFIG_DIR"
+ingress_domain: "$INGRESS_DOMAIN"
 AGENTCFG
 
 if [ -n "$REGISTRY_URL" ]; then

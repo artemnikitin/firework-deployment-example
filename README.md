@@ -2,14 +2,14 @@
 
 > This is an example deployment intended for demonstration and learning purposes only. It is not hardened, audited, etc.
 
-Example deployment of [Firework](https://github.com/artemnikitin/firework) on AWS using Packer (for building AMI) + Terraform.
+Example AWS and GCP deployments of [Firework](https://github.com/artemnikitin/firework) using Packer and Terraform.
 
 ## Related repositories
 
 - [firework](https://github.com/artemnikitin/firework) — The orchestrator itself
 - [firework-gitops-example](https://github.com/artemnikitin/firework-gitops-example) — Example GitOps configuration repository
 
-## Architecture
+## AWS architecture
 
 ```mermaid
 flowchart LR
@@ -53,33 +53,42 @@ flowchart LR
   end
 ```
 
-## Deployment Flow
+## Deployment flow
 
-0. Make sure that you are using an AWS account with correct permissions to deploy all the resources. See `iam-policies` folder for more details.
-1. Build AMI for EC2 instance(s) with Packer.
-2. Deploy control-plane stack (creates ECS services for `events`/`registry`/`controller` + config bucket).
-3. Deploy data-plane stack (creates network, EC2 instances, ALB, etc).
-4. Push configs/images and let the agent reconcile microVMs.
+1. Choose a provider and configure the permissions described in `iam-policies/<provider>`.
+2. Build the node image with `packer/<provider>`.
+3. Deploy `terraform/control-plane/<provider>`.
+4. Deploy `terraform/data-plane/<provider>`.
+5. Push configs/images and let the agent reconcile microVMs.
 
 ## Detailed Guides
 
-- Packer AMI build: [packer/README.md](packer/README.md)
-- Control plane Terraform stack: [terraform/control-plane/README.md](terraform/control-plane/README.md)
-- Data-plane Terraform stack: [terraform/data-plane/README.md](terraform/data-plane/README.md)
+- AWS: [Packer](packer/aws/README.md), [control plane](terraform/control-plane/aws/README.md), [data plane](terraform/data-plane/aws/README.md)
+- GCP: [Packer](packer/gcp/README.md), [control plane](terraform/control-plane/gcp/README.md), [data plane](terraform/data-plane/gcp/README.md)
 
 ## Key Notes
 
 - Deploy order matters: control-plane first, data-plane second.
 - Nodes are in private subnets; use AWS Session Manager for access — no SSH exposed.
 - ALB serves HTTPS (TLS 1.2/1.3); host-based routing per tenant is handled by Traefik on the nodes.
+- Each platform's domain variable is the single source of truth for DNS, the wildcard TLS certificate, and the agent `ingress_domain`. GitOps services set `metadata.subdomain: <label>` and resolve to `<subdomain>.<domain>` — `<subdomain>.<domain_name>` on AWS and `<subdomain>.<base_domain>` on GCP — so one provider-neutral GitOps tree serves both.
 - Optional step-ca service can issue short-lived node certs via AWS IID instead of static bootstrap tokens.
 - Observability is managed as code in Terraform (dashboards, logs, access logs, metric filters).
 
+For GCP, the control-plane roles run as GKE Autopilot workloads (Deployments + LoadBalancer Services), with secrets delivered via the Secrets Store CSI driver from Secret Manager and Workload Identity for authentication. Both planes use private VMs/nodes with Cloud NAT; the x86_64 data plane is a regional managed instance group using nested virtualization, GCS, and a global HTTPS load balancer to Traefik. See the GCP guides above for container image, DNS delegation, and TLS prerequisites.
+
 ## Cleanup
 
-Destroy in reverse order:
+Destroy each provider in reverse order. AWS stacks can be destroyed in a single step. **GCP requires two steps for the control-plane** because the state bucket has versioning enabled and `force_destroy` defaults to `false`:
 
 ```bash
-cd terraform/data-plane && terraform destroy
-cd ../control-plane && terraform destroy
+# AWS
+cd terraform/data-plane/aws && terraform destroy
+cd ../../control-plane/aws && terraform destroy
+
+# GCP — unlock the state bucket first, then destroy
+cd terraform/data-plane/gcp && terraform destroy
+cd ../../control-plane/gcp
+terraform apply -var='state_bucket_force_destroy=true' -target=google_storage_bucket.state
+terraform destroy -var='state_bucket_force_destroy=true'
 ```

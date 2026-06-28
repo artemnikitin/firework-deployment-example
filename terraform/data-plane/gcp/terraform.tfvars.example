@@ -1,0 +1,18 @@
+gcp_project   = "my-gcp-project"
+gcp_region    = "us-central1"
+dns_zone_name = "firework-gcp"
+# Single source of truth for wildcard DNS, the wildcard TLS certificate, and the
+# agent ingress_domain. Services route as <subdomain>.<base_domain>.
+base_domain       = "gcp.example.com"
+images_bucket_name = "firework-images-amd64-my-gcp-project"
+
+# Copy these values from terraform/control-plane/gcp outputs.
+config_bucket_name                       = "firework-cp-state-my-gcp-project"
+config_prefix                            = "cp/v1/"
+registry_url                             = "https://34.0.0.1:9443"
+registry_server_name                     = "34.0.0.1"
+registry_ca_secret_id                    = "firework-enrollment-ca-cert"
+registry_bootstrap_token_secret_id       = "firework-registry-bootstrap"
+
+node_machine_type = "n2-standard-8"
+node_count        = 3

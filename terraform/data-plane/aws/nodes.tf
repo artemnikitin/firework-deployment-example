@@ -59,6 +59,7 @@ resource "aws_launch_template" "node" {
     cw_metric_namespace                 = local.agent_metric_namespace
     cw_prometheus_log_group             = aws_cloudwatch_log_group.node_prometheus.name
     traefik_config_dir                  = "/etc/traefik/dynamic"
+    ingress_domain                      = trimsuffix(var.domain_name, ".")
   }))
 
   tag_specifications {

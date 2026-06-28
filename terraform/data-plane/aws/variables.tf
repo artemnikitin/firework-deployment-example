@@ -19,7 +19,7 @@ variable "use_control_plane_remote_state" {
 variable "control_plane_state_path" {
   description = "Path to control-plane terraform state file used for auto-wiring (relative to this stack when using local backend)."
   type        = string
-  default     = "../control-plane/terraform.tfstate"
+  default     = "../../control-plane/aws/terraform.tfstate"
 }
 
 variable "vpc_cidr" {
@@ -169,7 +169,7 @@ variable "use_packer_manifest_ami" {
 variable "packer_manifest_path" {
   description = "Path to Packer manifest.json used for AMI auto-resolution (relative to this stack when not absolute)."
   type        = string
-  default     = "../../packer/manifest.json"
+  default     = "../../../packer/aws/manifest.json"
 }
 
 variable "node_key_name" {
@@ -215,9 +215,19 @@ variable "traefik_port" {
 # --- DNS ---
 
 variable "domain_name" {
-  description = "Root domain name for DNS records (Route53 hosted zone must pre-exist)"
+  description = "Root domain name for DNS records (Route53 hosted zone must pre-exist). Single source of truth for the wildcard ACM certificate and the agent ingress_domain; routes resolve as <subdomain>.<domain_name>. Must be a canonical lowercase, multi-label DNS name with no trailing dot, scheme, port, path, or wildcard."
   type        = string
   default     = "xyz.com"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$", var.domain_name))
+    error_message = "domain_name must be a canonical lowercase multi-label DNS name (e.g. example.com) with no trailing dot, scheme, port, path, or wildcard."
+  }
+
+  validation {
+    condition     = length(var.domain_name) <= 253
+    error_message = "domain_name must be at most 253 characters."
+  }
 }
 
 # --- ACM ---
