@@ -47,6 +47,8 @@ jobs:
         with:
           tflint_version: latest
       - run: tflint --init
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - run: tflint
 
   packer:
