@@ -19,14 +19,14 @@ output "registry_server_name" {
 }
 
 output "registry_ca_secret_id" {
-  value = var.enrollment_ca_cert_secret_id
+  value = local.effective_enrollment_ca_cert_secret_id
 }
 
 output "registry_bootstrap_token_secret_id" {
-  value = var.bootstrap_token_secret_id
+  value = local.effective_bootstrap_token_secret_id
 }
 
 output "webhook_secret_id" {
-  value       = var.webhook_secret_id
+  value       = local.effective_webhook_secret_id
   description = "Secret Manager secret ID holding the GitHub webhook secret. Retrieve the value with: gcloud secrets versions access latest --secret=$WEBHOOK_SECRET_ID"
 }

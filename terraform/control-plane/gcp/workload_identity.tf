@@ -30,19 +30,17 @@ resource "google_project_iam_member" "monitoring_writer" {
 }
 
 locals {
-  secret_accessors = merge(
-    {
-      webhook      = var.webhook_secret_id
-      bootstrap    = var.bootstrap_token_secret_id
-      ev-tls-cert  = var.events_tls_cert_secret_id
-      ev-tls-key   = var.events_tls_key_secret_id
-      reg-tls-cert = var.registry_tls_cert_secret_id
-      reg-tls-key  = var.registry_tls_key_secret_id
-      ca-cert      = var.enrollment_ca_cert_secret_id
-      ca-key       = var.enrollment_ca_key_secret_id
-    },
-    var.github_token_secret_id != "" ? { github-token = var.github_token_secret_id } : {}
-  )
+  secret_accessors = { for k, v in {
+    webhook      = local.effective_webhook_secret_id
+    bootstrap    = local.effective_bootstrap_token_secret_id
+    ev-tls-cert  = local.effective_events_tls_cert_secret_id
+    ev-tls-key   = local.effective_events_tls_key_secret_id
+    reg-tls-cert = local.effective_registry_tls_cert_secret_id
+    reg-tls-key  = local.effective_registry_tls_key_secret_id
+    ca-cert      = local.effective_enrollment_ca_cert_secret_id
+    ca-key       = local.effective_enrollment_ca_key_secret_id
+    github-token = var.github_token_secret_id
+  } : k => v if v != "" }
 }
 
 resource "google_secret_manager_secret_iam_member" "controlplane_accessor" {

@@ -39,5 +39,7 @@ resource "google_container_cluster" "control_plane" {
     channel = "REGULAR"
   }
 
+  deletion_protection = false
+
   depends_on = [google_project_service.required]
 }

@@ -149,46 +149,69 @@ variable "reconcile_on_start" {
   }
 }
 
-# --- Secret Manager secret IDs (operator-created before terraform apply) ---
+# --- Secret bootstrap ---
+
+variable "auto_create_demo_secrets" {
+  type        = bool
+  default     = true
+  description = "When true, Terraform auto-generates TLS certs, enrollment CA, and bootstrap token and stores them in Secret Manager. Set to false and supply all *_secret_id vars to bring your own."
+}
+
+variable "auto_generated_tls_validity_hours" {
+  type        = number
+  default     = 8760
+  description = "Validity period (hours) for auto-generated TLS certs and CA. Default is 1 year."
+}
+
+# --- Secret Manager secret IDs ---
+# webhook_secret_id is always operator-provided (you configure the same value in GitHub).
+# All others default to "" and are auto-generated when auto_create_demo_secrets = true.
 
 variable "webhook_secret_id" {
   type        = string
-  description = "Secret Manager secret ID containing the GitHub webhook secret value"
+  description = "Secret Manager secret ID containing the GitHub webhook secret value. Always operator-provided."
 }
 
 variable "bootstrap_token_secret_id" {
   type        = string
-  description = "Secret Manager secret ID containing the node bootstrap token value"
+  default     = ""
+  description = "Secret Manager secret ID for the node bootstrap token. Auto-generated when empty and auto_create_demo_secrets = true."
 }
 
 variable "events_tls_cert_secret_id" {
   type        = string
-  description = "Secret Manager secret ID containing the events server TLS certificate PEM"
+  default     = ""
+  description = "Secret Manager secret ID for the events server TLS cert PEM. Auto-generated when empty and auto_create_demo_secrets = true."
 }
 
 variable "events_tls_key_secret_id" {
   type        = string
-  description = "Secret Manager secret ID containing the events server TLS private key PEM"
+  default     = ""
+  description = "Secret Manager secret ID for the events server TLS private key PEM. Auto-generated when empty and auto_create_demo_secrets = true."
 }
 
 variable "registry_tls_cert_secret_id" {
   type        = string
-  description = "Secret Manager secret ID containing the registry server TLS certificate PEM"
+  default     = ""
+  description = "Secret Manager secret ID for the registry server TLS cert PEM. Auto-generated when empty and auto_create_demo_secrets = true."
 }
 
 variable "registry_tls_key_secret_id" {
   type        = string
-  description = "Secret Manager secret ID containing the registry server TLS private key PEM"
+  default     = ""
+  description = "Secret Manager secret ID for the registry server TLS private key PEM. Auto-generated when empty and auto_create_demo_secrets = true."
 }
 
 variable "enrollment_ca_cert_secret_id" {
   type        = string
-  description = "Secret Manager secret ID containing the enrollment CA certificate PEM"
+  default     = ""
+  description = "Secret Manager secret ID for the enrollment CA cert PEM. Auto-generated when empty and auto_create_demo_secrets = true."
 }
 
 variable "enrollment_ca_key_secret_id" {
   type        = string
-  description = "Secret Manager secret ID containing the enrollment CA private key PEM"
+  default     = ""
+  description = "Secret Manager secret ID for the enrollment CA private key PEM. Auto-generated when empty and auto_create_demo_secrets = true."
 }
 
 variable "github_token_secret_id" {

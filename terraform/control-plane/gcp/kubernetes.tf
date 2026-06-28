@@ -77,33 +77,72 @@ locals {
     controller_tick       = var.controller_tick
   })
 
-  # CSI secrets YAML for each role's SecretProviderClass
-  events_csi_secrets = <<-EOT
-    - resourceName: "projects/${var.gcp_project}/secrets/${var.webhook_secret_id}/versions/latest"
-      path: "secrets/webhook-secret"
-    - resourceName: "projects/${var.gcp_project}/secrets/${var.events_tls_cert_secret_id}/versions/latest"
-      path: "tls/server.crt"
-    - resourceName: "projects/${var.gcp_project}/secrets/${var.events_tls_key_secret_id}/versions/latest"
-      path: "tls/server.key"
-  EOT
+  # Effective secret values — directly from Terraform resources when auto-generated,
+  # from Secret Manager data sources when operator-provided.
+  secret_events_tls_cert   = local.auto_generate_tls_material ? tls_locally_signed_cert.auto_events_tls[0].cert_pem : data.google_secret_manager_secret_version.user_events_tls_cert[0].secret_data
+  secret_events_tls_key    = local.auto_generate_tls_material ? tls_private_key.auto_events_tls[0].private_key_pem : data.google_secret_manager_secret_version.user_events_tls_key[0].secret_data
+  secret_registry_tls_cert  = local.auto_generate_tls_material ? tls_locally_signed_cert.auto_registry_tls[0].cert_pem : data.google_secret_manager_secret_version.user_registry_tls_cert[0].secret_data
+  secret_registry_tls_key   = local.auto_generate_tls_material ? tls_private_key.auto_registry_tls[0].private_key_pem : data.google_secret_manager_secret_version.user_registry_tls_key[0].secret_data
+  secret_enrollment_ca_cert = local.auto_generate_tls_material ? tls_self_signed_cert.auto_root_ca[0].cert_pem : data.google_secret_manager_secret_version.user_enrollment_ca_cert[0].secret_data
+  secret_enrollment_ca_key  = local.auto_generate_tls_material ? tls_private_key.auto_root_ca[0].private_key_pem : data.google_secret_manager_secret_version.user_enrollment_ca_key[0].secret_data
+  secret_bootstrap_token    = local.auto_generate_bootstrap ? random_password.auto_bootstrap_token[0].result : data.google_secret_manager_secret_version.user_bootstrap_token[0].secret_data
+}
 
-  registry_csi_secrets = <<-EOT
-    - resourceName: "projects/${var.gcp_project}/secrets/${var.bootstrap_token_secret_id}/versions/latest"
-      path: "secrets/bootstrap-token"
-    - resourceName: "projects/${var.gcp_project}/secrets/${var.registry_tls_cert_secret_id}/versions/latest"
-      path: "tls/server.crt"
-    - resourceName: "projects/${var.gcp_project}/secrets/${var.registry_tls_key_secret_id}/versions/latest"
-      path: "tls/server.key"
-    - resourceName: "projects/${var.gcp_project}/secrets/${var.enrollment_ca_cert_secret_id}/versions/latest"
-      path: "tls/enrollment-ca.crt"
-    - resourceName: "projects/${var.gcp_project}/secrets/${var.enrollment_ca_key_secret_id}/versions/latest"
-      path: "tls/enrollment-ca.key"
-  EOT
+# ---------------------------------------------------------------------------
+# Secret Manager data sources — only for operator-provided secrets
+# ---------------------------------------------------------------------------
 
-  controller_csi_secrets = <<-EOT
-    - resourceName: "projects/${var.gcp_project}/secrets/${var.bootstrap_token_secret_id}/versions/latest"
-      path: "secrets/bootstrap-token"
-  EOT
+data "google_secret_manager_secret_version" "webhook_secret" {
+  secret  = var.webhook_secret_id
+  version = "latest"
+}
+
+data "google_secret_manager_secret_version" "user_events_tls_cert" {
+  count   = !local.auto_generate_tls_material ? 1 : 0
+  secret  = var.events_tls_cert_secret_id
+  version = "latest"
+}
+
+data "google_secret_manager_secret_version" "user_events_tls_key" {
+  count   = !local.auto_generate_tls_material ? 1 : 0
+  secret  = var.events_tls_key_secret_id
+  version = "latest"
+}
+
+data "google_secret_manager_secret_version" "user_registry_tls_cert" {
+  count   = !local.auto_generate_tls_material ? 1 : 0
+  secret  = var.registry_tls_cert_secret_id
+  version = "latest"
+}
+
+data "google_secret_manager_secret_version" "user_registry_tls_key" {
+  count   = !local.auto_generate_tls_material ? 1 : 0
+  secret  = var.registry_tls_key_secret_id
+  version = "latest"
+}
+
+data "google_secret_manager_secret_version" "user_enrollment_ca_cert" {
+  count   = !local.auto_generate_tls_material ? 1 : 0
+  secret  = var.enrollment_ca_cert_secret_id
+  version = "latest"
+}
+
+data "google_secret_manager_secret_version" "user_enrollment_ca_key" {
+  count   = !local.auto_generate_tls_material ? 1 : 0
+  secret  = var.enrollment_ca_key_secret_id
+  version = "latest"
+}
+
+data "google_secret_manager_secret_version" "user_bootstrap_token" {
+  count   = !local.auto_generate_bootstrap ? 1 : 0
+  secret  = var.bootstrap_token_secret_id
+  version = "latest"
+}
+
+data "google_secret_manager_secret_version" "github_token" {
+  count   = var.github_token_secret_id != "" ? 1 : 0
+  secret  = var.github_token_secret_id
+  version = "latest"
 }
 
 # ---------------------------------------------------------------------------
@@ -162,81 +201,54 @@ resource "kubernetes_config_map" "controller" {
 }
 
 # ---------------------------------------------------------------------------
-# SecretProviderClasses (GCP Secrets Store CSI driver)
-# Files are mounted at local.secrets_mount = /etc/firework
+# Kubernetes Secrets — secret values written at apply time, mounted as files.
+# Keys use dashes; items{} maps them to the paths the app expects.
 # ---------------------------------------------------------------------------
 
-resource "kubernetes_manifest" "spc_events" {
-  manifest = {
-    apiVersion = "secrets-store.csi.x-k8s.io/v1"
-    kind       = "SecretProviderClass"
-    metadata = {
-      name      = "firework-events-secrets"
-      namespace = kubernetes_namespace.firework.metadata[0].name
-    }
-    spec = {
-      provider   = "gcp"
-      parameters = { secrets = local.events_csi_secrets }
-    }
+resource "kubernetes_secret" "events_secrets" {
+  metadata {
+    name      = "firework-events-secrets"
+    namespace = kubernetes_namespace.firework.metadata[0].name
+  }
+  data = {
+    "webhook-secret" = data.google_secret_manager_secret_version.webhook_secret.secret_data
+    "tls-server-crt" = local.secret_events_tls_cert
+    "tls-server-key" = local.secret_events_tls_key
   }
 }
 
-# When a GitHub token is provided it is synced to an ephemeral Kubernetes
-# Secret via secretObjects so the binary can read it as GITHUB_TOKEN env var.
-resource "kubernetes_manifest" "spc_events_github_token" {
+resource "kubernetes_secret" "registry_secrets" {
+  metadata {
+    name      = "firework-registry-secrets"
+    namespace = kubernetes_namespace.firework.metadata[0].name
+  }
+  data = {
+    "bootstrap-token"   = local.secret_bootstrap_token
+    "tls-server-crt"    = local.secret_registry_tls_cert
+    "tls-server-key"    = local.secret_registry_tls_key
+    "enrollment-ca-crt" = local.secret_enrollment_ca_cert
+    "enrollment-ca-key" = local.secret_enrollment_ca_key
+  }
+}
+
+resource "kubernetes_secret" "controller_secrets" {
+  metadata {
+    name      = "firework-controller-secrets"
+    namespace = kubernetes_namespace.firework.metadata[0].name
+  }
+  data = {
+    "bootstrap-token" = local.secret_bootstrap_token
+  }
+}
+
+resource "kubernetes_secret" "github_token" {
   count = var.github_token_secret_id != "" ? 1 : 0
-
-  manifest = {
-    apiVersion = "secrets-store.csi.x-k8s.io/v1"
-    kind       = "SecretProviderClass"
-    metadata = {
-      name      = "firework-events-github-token"
-      namespace = kubernetes_namespace.firework.metadata[0].name
-    }
-    spec = {
-      provider = "gcp"
-      parameters = {
-        secrets = "- resourceName: \"projects/${var.gcp_project}/secrets/${var.github_token_secret_id}/versions/latest\"\n  path: \"secrets/github-token\"\n"
-      }
-      secretObjects = [{
-        secretName = "firework-github-token"
-        type       = "Opaque"
-        data = [{
-          objectName = "secrets/github-token"
-          key        = "token"
-        }]
-      }]
-    }
+  metadata {
+    name      = "firework-github-token"
+    namespace = kubernetes_namespace.firework.metadata[0].name
   }
-}
-
-resource "kubernetes_manifest" "spc_registry" {
-  manifest = {
-    apiVersion = "secrets-store.csi.x-k8s.io/v1"
-    kind       = "SecretProviderClass"
-    metadata = {
-      name      = "firework-registry-secrets"
-      namespace = kubernetes_namespace.firework.metadata[0].name
-    }
-    spec = {
-      provider   = "gcp"
-      parameters = { secrets = local.registry_csi_secrets }
-    }
-  }
-}
-
-resource "kubernetes_manifest" "spc_controller" {
-  manifest = {
-    apiVersion = "secrets-store.csi.x-k8s.io/v1"
-    kind       = "SecretProviderClass"
-    metadata = {
-      name      = "firework-controller-secrets"
-      namespace = kubernetes_namespace.firework.metadata[0].name
-    }
-    spec = {
-      provider   = "gcp"
-      parameters = { secrets = local.controller_csi_secrets }
-    }
+  data = {
+    token = data.google_secret_manager_secret_version.github_token[0].secret_data
   }
 }
 
@@ -292,15 +304,6 @@ resource "kubernetes_deployment" "events" {
             read_only  = true
           }
 
-          dynamic "volume_mount" {
-            for_each = var.github_token_secret_id != "" ? [1] : []
-            content {
-              name       = "github-token"
-              mount_path = "/etc/firework-github-token"
-              read_only  = true
-            }
-          }
-
           dynamic "env" {
             for_each = var.github_token_secret_id != "" ? [1] : []
             content {
@@ -325,25 +328,20 @@ resource "kubernetes_deployment" "events" {
 
         volume {
           name = "secrets"
-          csi {
-            driver    = "secrets-store.csi.k8s.io"
-            read_only = true
-            volume_attributes = {
-              secretProviderClass = "firework-events-secrets"
+          secret {
+            secret_name  = kubernetes_secret.events_secrets.metadata[0].name
+            default_mode = "0444"
+            items {
+              key  = "webhook-secret"
+              path = "secrets/webhook-secret"
             }
-          }
-        }
-
-        dynamic "volume" {
-          for_each = var.github_token_secret_id != "" ? [1] : []
-          content {
-            name = "github-token"
-            csi {
-              driver    = "secrets-store.csi.k8s.io"
-              read_only = true
-              volume_attributes = {
-                secretProviderClass = "firework-events-github-token"
-              }
+            items {
+              key  = "tls-server-crt"
+              path = "tls/server.crt"
+            }
+            items {
+              key  = "tls-server-key"
+              path = "tls/server.key"
             }
           }
         }
@@ -354,7 +352,6 @@ resource "kubernetes_deployment" "events" {
   depends_on = [
     google_secret_manager_secret_iam_member.controlplane_accessor,
     google_storage_bucket_iam_member.state_object_admin,
-    kubernetes_manifest.spc_events,
   ]
 }
 
@@ -416,11 +413,28 @@ resource "kubernetes_deployment" "registry" {
 
         volume {
           name = "secrets"
-          csi {
-            driver    = "secrets-store.csi.k8s.io"
-            read_only = true
-            volume_attributes = {
-              secretProviderClass = "firework-registry-secrets"
+          secret {
+            secret_name  = kubernetes_secret.registry_secrets.metadata[0].name
+            default_mode = "0444"
+            items {
+              key  = "bootstrap-token"
+              path = "secrets/bootstrap-token"
+            }
+            items {
+              key  = "tls-server-crt"
+              path = "tls/server.crt"
+            }
+            items {
+              key  = "tls-server-key"
+              path = "tls/server.key"
+            }
+            items {
+              key  = "enrollment-ca-crt"
+              path = "tls/enrollment-ca.crt"
+            }
+            items {
+              key  = "enrollment-ca-key"
+              path = "tls/enrollment-ca.key"
             }
           }
         }
@@ -431,7 +445,6 @@ resource "kubernetes_deployment" "registry" {
   depends_on = [
     google_secret_manager_secret_iam_member.controlplane_accessor,
     google_storage_bucket_iam_member.state_object_admin,
-    kubernetes_manifest.spc_registry,
   ]
 }
 
@@ -487,11 +500,12 @@ resource "kubernetes_deployment" "controller" {
 
         volume {
           name = "secrets"
-          csi {
-            driver    = "secrets-store.csi.k8s.io"
-            read_only = true
-            volume_attributes = {
-              secretProviderClass = "firework-controller-secrets"
+          secret {
+            secret_name  = kubernetes_secret.controller_secrets.metadata[0].name
+            default_mode = "0444"
+            items {
+              key  = "bootstrap-token"
+              path = "secrets/bootstrap-token"
             }
           }
         }
@@ -501,7 +515,6 @@ resource "kubernetes_deployment" "controller" {
 
   depends_on = [
     google_storage_bucket_iam_member.state_object_admin,
-    kubernetes_manifest.spc_controller,
   ]
 }
 

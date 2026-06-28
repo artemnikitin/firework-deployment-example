@@ -2,15 +2,17 @@
 
 The demo stacks require permissions to manage Compute Engine networks,
 instances and load balancers; GCS buckets and IAM; Secret Manager secrets;
-Cloud DNS; Certificate Manager; service accounts; logging metrics; and
-monitoring resources. Typical predefined roles are:
+Cloud DNS; Certificate Manager; GKE clusters; service accounts; logging
+metrics; and monitoring resources. Typical predefined roles are:
 
 - `roles/compute.admin`
+- `roles/container.admin` — create and manage GKE Autopilot clusters (GCP control-plane)
 - `roles/storage.admin`
 - `roles/secretmanager.admin`
 - `roles/dns.admin`
 - `roles/certificatemanager.editor`
 - `roles/iam.serviceAccountAdmin`
+- `roles/resourcemanager.projectIamAdmin` — grant project-level `logWriter`/`metricWriter` to runtime SAs
 - `roles/logging.configWriter`
 - `roles/monitoring.editor`
 
@@ -37,11 +39,13 @@ PRINCIPAL="user:you@example.com"   # or serviceAccount:NAME@PROJECT_ID.iam.gserv
 
 for role in \
   roles/compute.admin \
+  roles/container.admin \
   roles/storage.admin \
   roles/secretmanager.admin \
   roles/dns.admin \
   roles/certificatemanager.editor \
   roles/iam.serviceAccountAdmin \
+  roles/resourcemanager.projectIamAdmin \
   roles/logging.configWriter \
   roles/monitoring.editor; do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
