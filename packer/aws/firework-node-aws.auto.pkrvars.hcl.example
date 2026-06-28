@@ -3,6 +3,7 @@
 aws_region          = "us-east-1"
 instance_type       = "t4g.large"   # any ARM64 instance works — metal is only needed at runtime
 firecracker_version = "1.12.0"
+traefik_version     = "3.3.4"
 
 # Required when the account has no default VPC — set both or neither.
 # The subnet must be a public subnet so Packer can SSH into the builder instance.

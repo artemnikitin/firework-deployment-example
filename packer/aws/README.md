@@ -23,10 +23,8 @@ This document covers building the Firework node AMI in `packer/aws/`.
 ```bash
 cp firework-node-aws.auto.pkrvars.hcl.example firework-node-aws.auto.pkrvars.hcl
 # edit firework-node-aws.auto.pkrvars.hcl
-packer init firework-node-aws.pkr.hcl
-packer build \
-  -var-file="firework-node-aws.auto.pkrvars.hcl" \
-  firework-node-aws.pkr.hcl
+packer init .
+packer build -var-file="firework-node-aws.auto.pkrvars.hcl" .
 ```
 
 The AMI ID is printed at the end of the build output.
