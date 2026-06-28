@@ -89,6 +89,7 @@ resource "google_storage_bucket" "lb_access_logs" {
   location                    = var.gcp_region
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
+  force_destroy               = true
 
   lifecycle_rule {
     condition {
@@ -122,6 +123,7 @@ resource "google_storage_bucket" "log_archive" {
   location                    = var.gcp_region
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
+  force_destroy               = true
 
   lifecycle_rule {
     condition {
