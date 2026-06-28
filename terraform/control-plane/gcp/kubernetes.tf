@@ -79,8 +79,8 @@ locals {
 
   # Effective secret values — directly from Terraform resources when auto-generated,
   # from Secret Manager data sources when operator-provided.
-  secret_events_tls_cert   = local.auto_generate_tls_material ? tls_locally_signed_cert.auto_events_tls[0].cert_pem : data.google_secret_manager_secret_version.user_events_tls_cert[0].secret_data
-  secret_events_tls_key    = local.auto_generate_tls_material ? tls_private_key.auto_events_tls[0].private_key_pem : data.google_secret_manager_secret_version.user_events_tls_key[0].secret_data
+  secret_events_tls_cert    = local.auto_generate_tls_material ? tls_locally_signed_cert.auto_events_tls[0].cert_pem : data.google_secret_manager_secret_version.user_events_tls_cert[0].secret_data
+  secret_events_tls_key     = local.auto_generate_tls_material ? tls_private_key.auto_events_tls[0].private_key_pem : data.google_secret_manager_secret_version.user_events_tls_key[0].secret_data
   secret_registry_tls_cert  = local.auto_generate_tls_material ? tls_locally_signed_cert.auto_registry_tls[0].cert_pem : data.google_secret_manager_secret_version.user_registry_tls_cert[0].secret_data
   secret_registry_tls_key   = local.auto_generate_tls_material ? tls_private_key.auto_registry_tls[0].private_key_pem : data.google_secret_manager_secret_version.user_registry_tls_key[0].secret_data
   secret_enrollment_ca_cert = local.auto_generate_tls_material ? tls_self_signed_cert.auto_root_ca[0].cert_pem : data.google_secret_manager_secret_version.user_enrollment_ca_cert[0].secret_data
