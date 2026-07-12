@@ -1,17 +1,17 @@
 # Terraform
 **/*/.terraform/
 **/*/*.tfstate
-**/*/*.tfstate.backup
+**/*/*.tfstate.*
 **/*/.terraform.lock.hcl
 **/*/terraform.tfvars
 **/*/*.tfplan
 **/*/*.terraform.tfstate.lock.info
 
 # Packer
-packer/.packer.d/
-packer/packer_cache/
-packer/manifest.json
-packer/*.auto.pkrvars.hcl
+packer/**/.packer.d/
+packer/**/packer_cache/
+packer/**/manifest.json
+packer/**/*.auto.pkrvars.hcl
 
 # Build artifacts
 *.zip

@@ -1,0 +1,8 @@
+parent_domain  = "example.com"
+gcp_subdomain  = "gcp.example.com"
+gcp_dns_nameservers = [
+  "ns-cloud-a1.googledomains.com.",
+  "ns-cloud-a2.googledomains.com.",
+  "ns-cloud-a3.googledomains.com.",
+  "ns-cloud-a4.googledomains.com.",
+]

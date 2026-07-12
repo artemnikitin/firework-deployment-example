@@ -3,7 +3,11 @@ set -euo pipefail
 echo "==> Installing firework-agent"
 
 INSTALL_PATH="/usr/bin/firework-agent"
-ASSET_NAME="firework-agent-linux-arm64"
+case "$(uname -m)" in
+  aarch64) ASSET_NAME="firework-agent-linux-arm64" ;;
+  x86_64) ASSET_NAME="firework-agent-linux-amd64" ;;
+  *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+esac
 TMP_DOWNLOAD_PATH="/tmp/firework-agent.download"
 GITHUB_REPO="artemnikitin/firework"
 AGENT_GITHUB_TOKEN="${AGENT_GITHUB_TOKEN:-}"
@@ -78,7 +82,7 @@ print_private_repo_hint() {
   echo "Examples:"
   echo "  - packer build -var 'github_token=<token>' ..."
   echo "  - export PKR_VAR_github_token=<token> && packer build ..."
-  echo "If using firework-node.auto.pkrvars.hcl, make sure it is loaded by your current packer build command."
+  echo "If using an auto.pkrvars.hcl file, make sure it is loaded by your current Packer build command."
 }
 
 if [ -n "${AGENT_PATH:-}" ] && [ -f /tmp/firework-agent ] && [ -s /tmp/firework-agent ]; then

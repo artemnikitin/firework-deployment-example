@@ -2,7 +2,7 @@
 set -euo pipefail
 echo "==> Downloading Firecracker-compatible kernel"
 
-ARCH="aarch64"
+ARCH="$(uname -m)"
 IMAGES_DIR="/var/lib/images"
 
 sudo mkdir -p "$IMAGES_DIR"

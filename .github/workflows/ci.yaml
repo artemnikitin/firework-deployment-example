@@ -10,110 +10,106 @@ permissions:
   contents: read
 
 jobs:
-  terraform-data-plane:
-    name: "Terraform: data-plane"
+  terraform:
+    name: "Terraform: ${{ matrix.stack }}-${{ matrix.provider }}"
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - stack: control-plane
+            provider: aws
+            directory: terraform/control-plane/aws
+          - stack: control-plane
+            provider: gcp
+            directory: terraform/control-plane/gcp
+          - stack: data-plane
+            provider: aws
+            directory: terraform/data-plane/aws
+          - stack: data-plane
+            provider: gcp
+            directory: terraform/data-plane/gcp
+          - stack: dns-foundation
+            provider: aws
+            directory: terraform/dns-foundation
     defaults:
       run:
-        working-directory: terraform/data-plane
+        working-directory: ${{ matrix.directory }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "~> 1.9"
-
-      - name: Terraform fmt
-        run: terraform fmt -check -recursive .
-
-      - name: Terraform init
-        run: terraform init -backend=false
-
-      - name: Terraform validate
-        run: terraform validate
-
+      - run: terraform fmt -check -recursive .
+      - run: terraform init -backend=false
+      - run: terraform validate
       - uses: terraform-linters/setup-tflint@v4
         with:
           tflint_version: latest
+      - run: tflint --init
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - run: tflint
 
-      - name: TFLint init
-        run: tflint --init
-
-      - name: TFLint
-        run: tflint
-
-  terraform-control-plane:
-    name: "Terraform: control-plane"
+  packer:
+    name: "Packer: ${{ matrix.provider }}"
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - provider: aws
+            directory: packer/aws
+            validate_args: ""
+          - provider: gcp
+            directory: packer/gcp
+            validate_args: "-var=gcp_project=test-project"
     defaults:
       run:
-        working-directory: terraform/control-plane
+        working-directory: ${{ matrix.directory }}
     steps:
       - uses: actions/checkout@v4
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "~> 1.9"
-
-      - name: Terraform fmt
-        run: terraform fmt -check -recursive .
-
-      - name: Terraform init
-        run: terraform init -backend=false
-
-      - name: Terraform validate
-        run: terraform validate
-
-      - uses: terraform-linters/setup-tflint@v4
-        with:
-          tflint_version: latest
-
-      - name: TFLint init
-        run: tflint --init
-
-      - name: TFLint
-        run: tflint
-
-  packer-lint:
-    name: Packer Lint & Validate
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: packer
-    steps:
-      - uses: actions/checkout@v4
-
       - uses: hashicorp/setup-packer@main
         with:
           version: latest
-
-      - name: Packer fmt
-        run: packer fmt -check .
-
-      - name: Packer init
-        run: packer init .
-
-      - name: Packer validate
-        run: packer validate .
+      - run: packer fmt -check .
+      - run: packer init .
+      - run: packer validate ${{ matrix.validate_args }} .
 
   shellcheck:
     name: ShellCheck
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: ShellCheck packer scripts
-        run: shellcheck packer/scripts/*.sh
-
-      - name: ShellCheck user-data template
-        run: shellcheck terraform/data-plane/templates/user-data.sh.tpl
+      - name: Packer scripts
+        run: shellcheck packer/aws/*.sh packer/gcp/*.sh packer/scripts/*.sh
+      - name: Startup templates
+        run: shellcheck terraform/data-plane/aws/templates/user-data.sh.tpl terraform/data-plane/gcp/templates/startup-script.sh.tpl
 
   security-scan:
-    name: Security Scan (Trivy)
+    name: "Trivy: ${{ matrix.stack }}-${{ matrix.provider }}"
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - stack: control-plane
+            provider: aws
+            directory: terraform/control-plane/aws
+          - stack: control-plane
+            provider: gcp
+            directory: terraform/control-plane/gcp
+          - stack: data-plane
+            provider: aws
+            directory: terraform/data-plane/aws
+          - stack: data-plane
+            provider: gcp
+            directory: terraform/data-plane/gcp
+          - stack: dns-foundation
+            provider: aws
+            directory: terraform/dns-foundation
     steps:
       - uses: actions/checkout@v4
-
       - name: Install Trivy
         run: |
           sudo apt-get install -y wget apt-transport-https gnupg
@@ -121,9 +117,4 @@ jobs:
           echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" | sudo tee /etc/apt/sources.list.d/trivy.list
           sudo apt-get update
           sudo apt-get install -y trivy
-
-      - name: "Trivy: data-plane"
-        run: trivy config --severity HIGH,CRITICAL --exit-code 1 --ignorefile terraform/data-plane/.trivyignore terraform/data-plane/
-
-      - name: "Trivy: control-plane"
-        run: trivy config --severity HIGH,CRITICAL --exit-code 1 --ignorefile terraform/control-plane/.trivyignore terraform/control-plane/
+      - run: trivy config --severity HIGH,CRITICAL --exit-code 1 --ignorefile "${{ matrix.directory }}/.trivyignore" "${{ matrix.directory }}/"

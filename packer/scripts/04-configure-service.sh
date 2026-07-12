@@ -8,11 +8,10 @@ sudo mkdir -p /var/lib/images
 sudo mkdir -p /etc/firework
 
 # Create a placeholder agent config.
-# The real config is written by the EC2 user data script at boot time,
-# which fills in node_name, s3_bucket, and s3_region.
+# The real provider-specific config is written by instance startup metadata.
 sudo tee /etc/firework/agent.yaml > /dev/null <<'EOF'
 # This file is overwritten by user data at instance launch.
-# See terraform/data-plane/templates/user-data.sh.tpl for the template.
+# See terraform/data-plane/<provider>/templates/ for the templates.
 node_names:
   - "unconfigured"
 store_type: "s3"

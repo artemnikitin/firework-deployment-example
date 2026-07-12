@@ -168,8 +168,8 @@
         "s3:ListBucketVersions"
       ],
       "Resource": [
-        "arn:aws:s3:::*-firework-*",
-        "arn:aws:s3:::*-firework-*/*",
+        "arn:aws:s3:::*-configs-*",
+        "arn:aws:s3:::*-configs-*/*",
         "arn:aws:s3:::*-alb-logs-*",
         "arn:aws:s3:::*-alb-logs-*/*"
       ]

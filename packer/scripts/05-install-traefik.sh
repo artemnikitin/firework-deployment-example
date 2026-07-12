@@ -1,10 +1,13 @@
 #!/bin/bash
-# Install Traefik reverse proxy (arm64 binary).
-# Called by Packer during AMI build.
+# Install the architecture-matched Traefik reverse proxy.
 set -euo pipefail
 
 TRAEFIK_VERSION="${TRAEFIK_VERSION:-3.3.4}"
-ARCH="arm64"
+case "$(uname -m)" in
+  aarch64) ARCH="arm64" ;;
+  x86_64) ARCH="amd64" ;;
+  *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+esac
 
 echo "==> Downloading Traefik v${TRAEFIK_VERSION} (${ARCH})"
 TMPDIR=$(mktemp -d)

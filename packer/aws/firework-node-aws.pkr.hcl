@@ -171,12 +171,12 @@ build {
 
   # --- System setup and KVM configuration ---
   provisioner "shell" {
-    script = "scripts/01-system-setup.sh"
+    script = "${path.root}/01-system-setup.sh"
   }
 
   # --- Install Firecracker ---
   provisioner "shell" {
-    script = "scripts/02-install-firecracker.sh"
+    script = "${path.root}/../scripts/02-install-firecracker.sh"
     environment_vars = [
       "FIRECRACKER_VERSION=${var.firecracker_version}",
     ]
@@ -184,7 +184,7 @@ build {
 
   # --- Download Firecracker-compatible kernel ---
   provisioner "shell" {
-    script = "scripts/02a-download-kernel.sh"
+    script = "${path.root}/../scripts/02a-download-kernel.sh"
     environment_vars = [
       "FIRECRACKER_VERSION=${var.firecracker_version}",
     ]
@@ -198,7 +198,7 @@ build {
   }
 
   provisioner "shell" {
-    script = "scripts/03-install-agent.sh"
+    script = "${path.root}/../scripts/03-install-agent.sh"
     environment_vars = [
       "AGENT_PATH=${var.firework_agent_path}",
       "AGENT_VERSION=${var.firework_agent_version}",
@@ -208,12 +208,12 @@ build {
 
   # --- Create systemd service and directories ---
   provisioner "shell" {
-    script = "scripts/04-configure-service.sh"
+    script = "${path.root}/../scripts/04-configure-service.sh"
   }
 
   # --- Install Traefik ---
   provisioner "shell" {
-    script = "scripts/05-install-traefik.sh"
+    script = "${path.root}/../scripts/05-install-traefik.sh"
     environment_vars = [
       "TRAEFIK_VERSION=${var.traefik_version}",
     ]
@@ -221,12 +221,12 @@ build {
 
   # --- Configure Traefik systemd service ---
   provisioner "shell" {
-    script = "scripts/06-configure-traefik.sh"
+    script = "${path.root}/../scripts/06-configure-traefik.sh"
   }
 
   # --- Cleanup ---
   provisioner "shell" {
-    script = "scripts/99-cleanup.sh"
+    script = "${path.root}/../scripts/99-cleanup.sh"
   }
 
   post-processor "manifest" {
