@@ -37,15 +37,6 @@ resource "google_compute_router_nat" "control_plane" {
   source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
 }
 
-# Static external IPs for the events and registry Kubernetes LoadBalancer Services.
-# GKE manages the underlying firewall rules for LoadBalancer-type Services.
-resource "google_compute_address" "events" {
-  name   = "${local.name_prefix}-events-ip"
-  region = var.gcp_region
-
-  depends_on = [google_project_service.required]
-}
-
 resource "google_compute_address" "registry" {
   name   = "${local.name_prefix}-registry-ip"
   region = var.gcp_region

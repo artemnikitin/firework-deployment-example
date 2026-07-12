@@ -1,13 +1,12 @@
 locals {
   k8s_namespace = "firework"
-  k8s_sa_name   = "firework-controlplane"
   secrets_mount = "/etc/firework"
   config_mount  = "/etc/firework-config"
   config_file   = "/etc/firework-config/controlplane.yaml"
 
   events_config = yamlencode({
     role               = "events"
-    events_listen_addr = var.events_listen_addr
+    events_listen_addr = ":${var.events_port}"
     state = {
       backend = "gcs"
       prefix  = var.state_prefix
@@ -33,7 +32,7 @@ locals {
 
   registry_config = yamlencode({
     role                 = "registry"
-    registry_listen_addr = var.registry_listen_addr
+    registry_listen_addr = ":${var.registry_port}"
     state = {
       backend = "gcs"
       prefix  = var.state_prefix
@@ -77,72 +76,46 @@ locals {
     controller_tick       = var.controller_tick
   })
 
-  # Effective secret values — directly from Terraform resources when auto-generated,
-  # from Secret Manager data sources when operator-provided.
-  secret_events_tls_cert    = local.auto_generate_tls_material ? tls_locally_signed_cert.auto_events_tls[0].cert_pem : data.google_secret_manager_secret_version.user_events_tls_cert[0].secret_data
-  secret_events_tls_key     = local.auto_generate_tls_material ? tls_private_key.auto_events_tls[0].private_key_pem : data.google_secret_manager_secret_version.user_events_tls_key[0].secret_data
-  secret_registry_tls_cert  = local.auto_generate_tls_material ? tls_locally_signed_cert.auto_registry_tls[0].cert_pem : data.google_secret_manager_secret_version.user_registry_tls_cert[0].secret_data
-  secret_registry_tls_key   = local.auto_generate_tls_material ? tls_private_key.auto_registry_tls[0].private_key_pem : data.google_secret_manager_secret_version.user_registry_tls_key[0].secret_data
-  secret_enrollment_ca_cert = local.auto_generate_tls_material ? tls_self_signed_cert.auto_root_ca[0].cert_pem : data.google_secret_manager_secret_version.user_enrollment_ca_cert[0].secret_data
-  secret_enrollment_ca_key  = local.auto_generate_tls_material ? tls_private_key.auto_root_ca[0].private_key_pem : data.google_secret_manager_secret_version.user_enrollment_ca_key[0].secret_data
-  secret_bootstrap_token    = local.auto_generate_bootstrap ? random_password.auto_bootstrap_token[0].result : data.google_secret_manager_secret_version.user_bootstrap_token[0].secret_data
-}
+  events_csi_secrets = concat([
+    {
+      resourceName = "projects/${var.gcp_project}/secrets/${local.effective_webhook_secret_id}/versions/latest"
+      path         = "secrets/webhook-secret"
+    },
+    {
+      resourceName = "projects/${var.gcp_project}/secrets/${local.effective_events_tls_cert_secret_id}/versions/latest"
+      path         = "tls/server.crt"
+    },
+    {
+      resourceName = "projects/${var.gcp_project}/secrets/${local.effective_events_tls_key_secret_id}/versions/latest"
+      path         = "tls/server.key"
+    },
+    ], var.github_token_secret_id != "" ? [{
+      resourceName = "projects/${var.gcp_project}/secrets/${var.github_token_secret_id}/versions/latest"
+      path         = "secrets/github-token"
+  }] : [])
 
-# ---------------------------------------------------------------------------
-# Secret Manager data sources — only for operator-provided secrets
-# ---------------------------------------------------------------------------
-
-data "google_secret_manager_secret_version" "webhook_secret" {
-  secret  = var.webhook_secret_id
-  version = "latest"
-}
-
-data "google_secret_manager_secret_version" "user_events_tls_cert" {
-  count   = !local.auto_generate_tls_material ? 1 : 0
-  secret  = var.events_tls_cert_secret_id
-  version = "latest"
-}
-
-data "google_secret_manager_secret_version" "user_events_tls_key" {
-  count   = !local.auto_generate_tls_material ? 1 : 0
-  secret  = var.events_tls_key_secret_id
-  version = "latest"
-}
-
-data "google_secret_manager_secret_version" "user_registry_tls_cert" {
-  count   = !local.auto_generate_tls_material ? 1 : 0
-  secret  = var.registry_tls_cert_secret_id
-  version = "latest"
-}
-
-data "google_secret_manager_secret_version" "user_registry_tls_key" {
-  count   = !local.auto_generate_tls_material ? 1 : 0
-  secret  = var.registry_tls_key_secret_id
-  version = "latest"
-}
-
-data "google_secret_manager_secret_version" "user_enrollment_ca_cert" {
-  count   = !local.auto_generate_tls_material ? 1 : 0
-  secret  = var.enrollment_ca_cert_secret_id
-  version = "latest"
-}
-
-data "google_secret_manager_secret_version" "user_enrollment_ca_key" {
-  count   = !local.auto_generate_tls_material ? 1 : 0
-  secret  = var.enrollment_ca_key_secret_id
-  version = "latest"
-}
-
-data "google_secret_manager_secret_version" "user_bootstrap_token" {
-  count   = !local.auto_generate_bootstrap ? 1 : 0
-  secret  = var.bootstrap_token_secret_id
-  version = "latest"
-}
-
-data "google_secret_manager_secret_version" "github_token" {
-  count   = var.github_token_secret_id != "" ? 1 : 0
-  secret  = var.github_token_secret_id
-  version = "latest"
+  registry_csi_secrets = [
+    {
+      resourceName = "projects/${var.gcp_project}/secrets/${local.effective_bootstrap_token_secret_id}/versions/latest"
+      path         = "secrets/bootstrap-token"
+    },
+    {
+      resourceName = "projects/${var.gcp_project}/secrets/${local.effective_registry_tls_cert_secret_id}/versions/latest"
+      path         = "tls/server.crt"
+    },
+    {
+      resourceName = "projects/${var.gcp_project}/secrets/${local.effective_registry_tls_key_secret_id}/versions/latest"
+      path         = "tls/server.key"
+    },
+    {
+      resourceName = "projects/${var.gcp_project}/secrets/${local.effective_enrollment_ca_cert_secret_id}/versions/latest"
+      path         = "tls/enrollment-ca.crt"
+    },
+    {
+      resourceName = "projects/${var.gcp_project}/secrets/${local.effective_enrollment_ca_key_secret_id}/versions/latest"
+      path         = "tls/enrollment-ca.key"
+    },
+  ]
 }
 
 # ---------------------------------------------------------------------------
@@ -157,13 +130,69 @@ resource "kubernetes_namespace" "firework" {
 }
 
 resource "kubernetes_service_account" "controlplane" {
+  for_each = local.controlplane_roles
+
   metadata {
-    name      = local.k8s_sa_name
+    name      = each.value.ksa_name
     namespace = kubernetes_namespace.firework.metadata[0].name
     annotations = {
-      "iam.gke.io/gcp-service-account" = google_service_account.controlplane.email
+      "iam.gke.io/gcp-service-account" = google_service_account.controlplane[each.key].email
     }
   }
+}
+
+# Secret Manager CSI volumes keep secret values out of Kubernetes Secret
+# objects and Terraform state when the operator supplies the secret material.
+resource "kubectl_manifest" "events_secret_provider_class" {
+  yaml_body = yamlencode({
+    apiVersion = "secrets-store.csi.x-k8s.io/v1"
+    kind       = "SecretProviderClass"
+    metadata = {
+      name      = "firework-events-secrets"
+      namespace = kubernetes_namespace.firework.metadata[0].name
+    }
+    spec = {
+      provider = "gke"
+      parameters = {
+        secrets = yamlencode(local.events_csi_secrets)
+      }
+    }
+  })
+
+  # The CRD is installed by the GKE Secret Manager CSI add-on, not by this
+  # configuration, so defer client-side schema validation to the API server.
+  validate_schema = false
+
+  depends_on = [
+    google_container_cluster.control_plane,
+    kubernetes_namespace.firework,
+    google_secret_manager_secret_iam_member.controlplane_accessor,
+  ]
+}
+
+resource "kubectl_manifest" "registry_secret_provider_class" {
+  yaml_body = yamlencode({
+    apiVersion = "secrets-store.csi.x-k8s.io/v1"
+    kind       = "SecretProviderClass"
+    metadata = {
+      name      = "firework-registry-secrets"
+      namespace = kubernetes_namespace.firework.metadata[0].name
+    }
+    spec = {
+      provider = "gke"
+      parameters = {
+        secrets = yamlencode(local.registry_csi_secrets)
+      }
+    }
+  })
+
+  validate_schema = false
+
+  depends_on = [
+    google_container_cluster.control_plane,
+    kubernetes_namespace.firework,
+    google_secret_manager_secret_iam_member.controlplane_accessor,
+  ]
 }
 
 # ---------------------------------------------------------------------------
@@ -201,58 +230,6 @@ resource "kubernetes_config_map" "controller" {
 }
 
 # ---------------------------------------------------------------------------
-# Kubernetes Secrets — secret values written at apply time, mounted as files.
-# Keys use dashes; items{} maps them to the paths the app expects.
-# ---------------------------------------------------------------------------
-
-resource "kubernetes_secret" "events_secrets" {
-  metadata {
-    name      = "firework-events-secrets"
-    namespace = kubernetes_namespace.firework.metadata[0].name
-  }
-  data = {
-    "webhook-secret" = data.google_secret_manager_secret_version.webhook_secret.secret_data
-    "tls-server-crt" = local.secret_events_tls_cert
-    "tls-server-key" = local.secret_events_tls_key
-  }
-}
-
-resource "kubernetes_secret" "registry_secrets" {
-  metadata {
-    name      = "firework-registry-secrets"
-    namespace = kubernetes_namespace.firework.metadata[0].name
-  }
-  data = {
-    "bootstrap-token"   = local.secret_bootstrap_token
-    "tls-server-crt"    = local.secret_registry_tls_cert
-    "tls-server-key"    = local.secret_registry_tls_key
-    "enrollment-ca-crt" = local.secret_enrollment_ca_cert
-    "enrollment-ca-key" = local.secret_enrollment_ca_key
-  }
-}
-
-resource "kubernetes_secret" "controller_secrets" {
-  metadata {
-    name      = "firework-controller-secrets"
-    namespace = kubernetes_namespace.firework.metadata[0].name
-  }
-  data = {
-    "bootstrap-token" = local.secret_bootstrap_token
-  }
-}
-
-resource "kubernetes_secret" "github_token" {
-  count = var.github_token_secret_id != "" ? 1 : 0
-  metadata {
-    name      = "firework-github-token"
-    namespace = kubernetes_namespace.firework.metadata[0].name
-  }
-  data = {
-    token = data.google_secret_manager_secret_version.github_token[0].secret_data
-  }
-}
-
-# ---------------------------------------------------------------------------
 # Deployments
 # ---------------------------------------------------------------------------
 
@@ -272,16 +249,20 @@ resource "kubernetes_deployment" "events" {
         labels = merge(local.common_labels, { role = "events" })
       }
       spec {
-        service_account_name = kubernetes_service_account.controlplane.metadata[0].name
+        service_account_name = kubernetes_service_account.controlplane["events"].metadata[0].name
 
         container {
-          name  = "controlplane"
-          image = var.controlplane_image
-          args  = ["--config", local.config_file]
+          name    = "controlplane"
+          image   = var.controlplane_image
+          command = ["/bin/sh", "-ec"]
+          args = [var.github_token_secret_id != "" ?
+            "export GITHUB_TOKEN=\"$(cat ${local.secrets_mount}/secrets/github-token)\"; exec /usr/local/bin/firework-controlplane --config ${local.config_file}" :
+            "exec /usr/local/bin/firework-controlplane --config ${local.config_file}"
+          ]
 
           port {
             name           = "events"
-            container_port = 9444
+            container_port = var.events_port
             protocol       = "TCP"
           }
 
@@ -290,6 +271,17 @@ resource "kubernetes_deployment" "events" {
               cpu    = "250m"
               memory = "512Mi"
             }
+          }
+
+          readiness_probe {
+            http_get {
+              path   = "/healthz"
+              port   = var.events_port
+              scheme = "HTTPS"
+            }
+            initial_delay_seconds = 10
+            period_seconds        = 15
+            failure_threshold     = 3
           }
 
           volume_mount {
@@ -304,19 +296,6 @@ resource "kubernetes_deployment" "events" {
             read_only  = true
           }
 
-          dynamic "env" {
-            for_each = var.github_token_secret_id != "" ? [1] : []
-            content {
-              name = "GITHUB_TOKEN"
-              value_from {
-                secret_key_ref {
-                  name     = "firework-github-token"
-                  key      = "token"
-                  optional = false
-                }
-              }
-            }
-          }
         }
 
         volume {
@@ -328,20 +307,11 @@ resource "kubernetes_deployment" "events" {
 
         volume {
           name = "secrets"
-          secret {
-            secret_name  = kubernetes_secret.events_secrets.metadata[0].name
-            default_mode = "0444"
-            items {
-              key  = "webhook-secret"
-              path = "secrets/webhook-secret"
-            }
-            items {
-              key  = "tls-server-crt"
-              path = "tls/server.crt"
-            }
-            items {
-              key  = "tls-server-key"
-              path = "tls/server.key"
+          csi {
+            driver    = "secrets-store-gke.csi.k8s.io"
+            read_only = true
+            volume_attributes = {
+              secretProviderClass = "firework-events-secrets"
             }
           }
         }
@@ -350,8 +320,9 @@ resource "kubernetes_deployment" "events" {
   }
 
   depends_on = [
-    google_secret_manager_secret_iam_member.controlplane_accessor,
+    kubectl_manifest.events_secret_provider_class,
     google_storage_bucket_iam_member.state_object_admin,
+    google_service_account_iam_member.workload_identity,
   ]
 }
 
@@ -371,7 +342,7 @@ resource "kubernetes_deployment" "registry" {
         labels = merge(local.common_labels, { role = "registry" })
       }
       spec {
-        service_account_name = kubernetes_service_account.controlplane.metadata[0].name
+        service_account_name = kubernetes_service_account.controlplane["registry"].metadata[0].name
 
         container {
           name  = "controlplane"
@@ -380,7 +351,7 @@ resource "kubernetes_deployment" "registry" {
 
           port {
             name           = "registry"
-            container_port = 9443
+            container_port = var.registry_port
             protocol       = "TCP"
           }
 
@@ -413,28 +384,11 @@ resource "kubernetes_deployment" "registry" {
 
         volume {
           name = "secrets"
-          secret {
-            secret_name  = kubernetes_secret.registry_secrets.metadata[0].name
-            default_mode = "0444"
-            items {
-              key  = "bootstrap-token"
-              path = "secrets/bootstrap-token"
-            }
-            items {
-              key  = "tls-server-crt"
-              path = "tls/server.crt"
-            }
-            items {
-              key  = "tls-server-key"
-              path = "tls/server.key"
-            }
-            items {
-              key  = "enrollment-ca-crt"
-              path = "tls/enrollment-ca.crt"
-            }
-            items {
-              key  = "enrollment-ca-key"
-              path = "tls/enrollment-ca.key"
+          csi {
+            driver    = "secrets-store-gke.csi.k8s.io"
+            read_only = true
+            volume_attributes = {
+              secretProviderClass = "firework-registry-secrets"
             }
           }
         }
@@ -443,8 +397,9 @@ resource "kubernetes_deployment" "registry" {
   }
 
   depends_on = [
-    google_secret_manager_secret_iam_member.controlplane_accessor,
+    kubectl_manifest.registry_secret_provider_class,
     google_storage_bucket_iam_member.state_object_admin,
+    google_service_account_iam_member.workload_identity,
   ]
 }
 
@@ -464,7 +419,7 @@ resource "kubernetes_deployment" "controller" {
         labels = merge(local.common_labels, { role = "controller" })
       }
       spec {
-        service_account_name = kubernetes_service_account.controlplane.metadata[0].name
+        service_account_name = kubernetes_service_account.controlplane["controller"].metadata[0].name
 
         container {
           name  = "controlplane"
@@ -484,11 +439,6 @@ resource "kubernetes_deployment" "controller" {
             read_only  = true
           }
 
-          volume_mount {
-            name       = "secrets"
-            mount_path = local.secrets_mount
-            read_only  = true
-          }
         }
 
         volume {
@@ -498,28 +448,18 @@ resource "kubernetes_deployment" "controller" {
           }
         }
 
-        volume {
-          name = "secrets"
-          secret {
-            secret_name  = kubernetes_secret.controller_secrets.metadata[0].name
-            default_mode = "0444"
-            items {
-              key  = "bootstrap-token"
-              path = "secrets/bootstrap-token"
-            }
-          }
-        }
       }
     }
   }
 
   depends_on = [
     google_storage_bucket_iam_member.state_object_admin,
+    google_service_account_iam_member.workload_identity,
   ]
 }
 
 # ---------------------------------------------------------------------------
-# Services (external passthrough NLBs for events and registry)
+# Services and Gateway API routing for events (GKE L7 HTTPS LB with Certificate Manager)
 # ---------------------------------------------------------------------------
 
 resource "kubernetes_service" "events" {
@@ -527,23 +467,139 @@ resource "kubernetes_service" "events" {
     name      = "firework-events"
     namespace = kubernetes_namespace.firework.metadata[0].name
     labels    = merge(local.common_labels, { role = "events" })
-    annotations = {
-      "networking.gke.io/load-balancer-type" = "External"
-    }
   }
   spec {
-    type                        = "LoadBalancer"
-    load_balancer_ip            = google_compute_address.events.address
-    load_balancer_source_ranges = var.events_allowed_cidrs
-    selector                    = { role = "events" }
+    type     = "ClusterIP"
+    selector = { role = "events" }
 
     port {
-      name        = "https"
-      port        = 443
-      target_port = 9444
-      protocol    = "TCP"
+      name         = "https"
+      port         = var.events_port
+      target_port  = var.events_port
+      protocol     = "TCP"
+      app_protocol = "HTTPS"
     }
   }
+}
+
+resource "kubectl_manifest" "events_gateway" {
+  yaml_body = yamlencode({
+    apiVersion = "gateway.networking.k8s.io/v1"
+    kind       = "Gateway"
+    metadata = {
+      name      = "firework-events"
+      namespace = kubernetes_namespace.firework.metadata[0].name
+      labels    = merge(local.common_labels, { role = "events" })
+      annotations = {
+        "networking.gke.io/certmap" = local.effective_events_certificate_map_name
+      }
+    }
+    spec = {
+      gatewayClassName = "gke-l7-global-external-managed"
+      addresses = [{
+        type  = "NamedAddress"
+        value = local.effective_events_gateway_address_name
+      }]
+      listeners = [{
+        name     = "https"
+        protocol = "HTTPS"
+        port     = 443
+        hostname = trimsuffix(var.events_domain, ".")
+        allowedRoutes = {
+          namespaces = {
+            from = "Same"
+          }
+        }
+      }]
+    }
+  })
+
+  validate_schema = false
+
+  depends_on = [
+    google_container_cluster.control_plane,
+    kubernetes_namespace.firework,
+    terraform_data.validate_events_edge_wiring,
+  ]
+}
+
+resource "kubectl_manifest" "events_route" {
+  yaml_body = yamlencode({
+    apiVersion = "gateway.networking.k8s.io/v1"
+    kind       = "HTTPRoute"
+    metadata = {
+      name      = "firework-events"
+      namespace = kubernetes_namespace.firework.metadata[0].name
+      labels    = merge(local.common_labels, { role = "events" })
+    }
+    spec = {
+      parentRefs = [{
+        name        = "firework-events"
+        sectionName = "https"
+      }]
+      hostnames = [trimsuffix(var.events_domain, ".")]
+      rules = [{
+        matches = [{
+          path = {
+            type  = "PathPrefix"
+            value = "/"
+          }
+        }]
+        backendRefs = [{
+          name = kubernetes_service.events.metadata[0].name
+          port = var.events_port
+        }]
+      }]
+    }
+  })
+
+  validate_schema = false
+
+  depends_on = [
+    kubectl_manifest.events_gateway,
+    kubernetes_service.events,
+  ]
+}
+
+# Gateway does not infer the Events readiness probe. Without this policy it
+# would issue HTTPS checks to /, while firework-controlplane exposes /healthz.
+resource "kubectl_manifest" "events_health_check" {
+  yaml_body = yamlencode({
+    apiVersion = "networking.gke.io/v1"
+    kind       = "HealthCheckPolicy"
+    metadata = {
+      name      = "firework-events"
+      namespace = kubernetes_namespace.firework.metadata[0].name
+    }
+    spec = {
+      default = {
+        checkIntervalSec   = 15
+        timeoutSec         = 5
+        healthyThreshold   = 1
+        unhealthyThreshold = 3
+        config = {
+          type = "HTTPS"
+          httpsHealthCheck = {
+            portSpecification = "USE_FIXED_PORT"
+            port              = var.events_port
+            requestPath       = "/healthz"
+          }
+        }
+      }
+      targetRef = {
+        group = ""
+        kind  = "Service"
+        name  = kubernetes_service.events.metadata[0].name
+      }
+    }
+  })
+
+  validate_schema = false
+
+  depends_on = [
+    kubectl_manifest.events_route,
+    kubernetes_service.events,
+  ]
 }
 
 resource "kubernetes_service" "registry" {
@@ -563,8 +619,8 @@ resource "kubernetes_service" "registry" {
 
     port {
       name        = "registry"
-      port        = 9443
-      target_port = 9443
+      port        = var.registry_port
+      target_port = var.registry_port
       protocol    = "TCP"
     }
   }

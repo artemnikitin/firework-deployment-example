@@ -1,18 +1,28 @@
 gcp_project   = "my-gcp-project"
 gcp_region    = "us-central1"
 dns_zone_name = "firework-gcp"
+# When moving the data plane to another region within the same VPC, choose a
+# non-overlapping range so Terraform can create the new subnet before retiring
+# the old regional MIG. For example: 10.31.0.0/24.
+# network_cidr = "10.31.0.0/24"
 # Single source of truth for wildcard DNS, the wildcard TLS certificate, and the
 # agent ingress_domain. Services route as <subdomain>.<base_domain>.
 base_domain       = "gcp.example.com"
 images_bucket_name = "firework-images-amd64-my-gcp-project"
 
-# Copy these values from terraform/control-plane/gcp outputs.
-config_bucket_name                       = "firework-cp-state-my-gcp-project"
-config_prefix                            = "cp/v1/"
-registry_url                             = "https://34.0.0.1:9443"
-registry_server_name                     = "34.0.0.1"
-registry_ca_secret_id                    = "firework-enrollment-ca-cert"
-registry_bootstrap_token_secret_id       = "firework-registry-bootstrap"
+# The default local-state wiring reads these from terraform/control-plane/gcp.
+# Uncomment only when the control-plane state file is intentionally unavailable.
+# config_bucket_name                 = "firework-cp-state-my-gcp-project"
+# config_prefix                      = "cp/v1/"
+# registry_url                       = "https://34.0.0.1:9443"
+# registry_server_name               = "34.0.0.1"
+# registry_ca_secret_id              = "firework-cp-enrollment-ca-cert"
+# registry_bootstrap_token_secret_id = "firework-cp-bootstrap-token"
 
-node_machine_type = "n2-standard-8"
+node_machine_type = "n4-standard-8"
 node_count        = 3
+node_zones = [
+  "us-central1-a",
+  "us-central1-b",
+  "us-central1-f",
+]

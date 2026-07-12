@@ -12,17 +12,21 @@ metrics; and monitoring resources. Typical predefined roles are:
 - `roles/dns.admin`
 - `roles/certificatemanager.editor`
 - `roles/iam.serviceAccountAdmin`
+- `roles/iam.serviceAccountUser` — project-level for the first apply, so Terraform can attach its newly-created node service account
+- `roles/serviceusage.serviceUsageAdmin` — enable APIs managed by Terraform
 - `roles/resourcemanager.projectIamAdmin` — grant project-level `logWriter`/`metricWriter` to runtime SAs
 - `roles/logging.configWriter`
 - `roles/monitoring.editor`
 
-Grant `roles/iam.serviceAccountUser` on each runtime service account so
-Terraform can attach it to instances and templates. The ACME provider uses the
-same Application Default Credentials and needs DNS Admin on the managed zone.
+Grant `roles/iam.serviceAccountUser` at project level before the first apply so
+Terraform can attach the runtime node service account it creates in that same
+apply. You can narrow this binding after bootstrap if you pre-create the service
+account and manage its resource-level policy separately.
 
-Restrict Terraform-state bucket `roles/storage.objectAdmin` to this principal.
-That state contains private keys, certificates, webhook secrets, and bootstrap
-tokens.
+Terraform state is local in the example stacks. Protect the local state files;
+when demo secret generation is enabled, they contain generated private keys and
+bootstrap tokens. Operator-provided Secret Manager values are mounted through
+CSI and are not read into Terraform state.
 
 ## Granting via CLI
 
@@ -45,28 +49,14 @@ for role in \
   roles/dns.admin \
   roles/certificatemanager.editor \
   roles/iam.serviceAccountAdmin \
+  roles/iam.serviceAccountUser \
+  roles/serviceusage.serviceUsageAdmin \
   roles/resourcemanager.projectIamAdmin \
   roles/logging.configWriter \
   roles/monitoring.editor; do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="$PRINCIPAL" --role="$role"
 done
-```
-
-`roles/iam.serviceAccountUser` on each runtime service account so Terraform can
-attach it to instances and templates:
-
-```bash
-gcloud iam service-accounts add-iam-policy-binding \
-  RUNTIME_SA@PROJECT_ID.iam.gserviceaccount.com \
-  --member="$PRINCIPAL" --role="roles/iam.serviceAccountUser"
-```
-
-Terraform-state bucket access (bucket-scoped, restricted to this principal):
-
-```bash
-gcloud storage buckets add-iam-policy-binding gs://TFSTATE_BUCKET \
-  --member="$PRINCIPAL" --role="roles/storage.objectAdmin"
 ```
 
 IAM changes can take up to a minute to propagate.
@@ -76,7 +66,3 @@ IAM changes can take up to a minute to propagate.
 - Project roles: **IAM & Admin → IAM**
   (`console.cloud.google.com/iam-admin/iam`), edit the principal's row or
   **+ GRANT ACCESS**, then **+ ADD ANOTHER ROLE** for each role above.
-- Per-service-account `Service Account User`: **IAM & Admin → Service
-  Accounts →** select the runtime SA **→ Permissions → Grant access**.
-- State bucket: **Cloud Storage → Buckets →** select the state bucket **→
-  Permissions → Grant access**, role **Storage Object Admin**.

@@ -1,10 +1,10 @@
 resource "google_compute_network" "data_plane" {
-  name                    = "firework-data-vpc"
+  name                    = "${local.name_prefix}-vpc"
   auto_create_subnetworks = false
 }
 
 resource "google_compute_subnetwork" "nodes" {
-  name                     = "firework-node-subnet"
+  name                     = "${local.name_prefix}-subnet"
   region                   = var.gcp_region
   network                  = google_compute_network.data_plane.id
   ip_cidr_range            = var.network_cidr
@@ -12,13 +12,13 @@ resource "google_compute_subnetwork" "nodes" {
 }
 
 resource "google_compute_router" "nodes" {
-  name    = "firework-node-router"
+  name    = "${local.name_prefix}-router"
   region  = var.gcp_region
   network = google_compute_network.data_plane.id
 }
 
 resource "google_compute_router_nat" "nodes" {
-  name                               = "firework-node-nat"
+  name                               = "${local.name_prefix}-nat"
   router                             = google_compute_router.nodes.name
   region                             = var.gcp_region
   nat_ip_allocate_option             = "AUTO_ONLY"
@@ -26,7 +26,7 @@ resource "google_compute_router_nat" "nodes" {
 }
 
 resource "google_compute_firewall" "intra_subnet" {
-  name    = "firework-node-internal"
+  name    = "${local.name_prefix}-internal"
   network = google_compute_network.data_plane.name
 
   allow {
@@ -34,11 +34,11 @@ resource "google_compute_firewall" "intra_subnet" {
   }
 
   source_ranges = [var.network_cidr]
-  target_tags   = ["firework-node"]
+  target_tags   = [local.node_network_tag]
 }
 
 resource "google_compute_firewall" "load_balancer" {
-  name    = "firework-node-lb-health"
+  name    = "${local.name_prefix}-lb-health"
   network = google_compute_network.data_plane.name
 
   allow {
@@ -47,11 +47,11 @@ resource "google_compute_firewall" "load_balancer" {
   }
 
   source_ranges = ["35.191.0.0/16", "130.211.0.0/22"]
-  target_tags   = ["firework-node"]
+  target_tags   = [local.node_network_tag]
 }
 
 resource "google_compute_firewall" "iap_ssh" {
-  name    = "firework-node-iap-ssh"
+  name    = "${local.name_prefix}-iap-ssh"
   network = google_compute_network.data_plane.name
 
   allow {
@@ -60,5 +60,5 @@ resource "google_compute_firewall" "iap_ssh" {
   }
 
   source_ranges = ["35.235.240.0/20"]
-  target_tags   = ["firework-node"]
+  target_tags   = [local.node_network_tag]
 }

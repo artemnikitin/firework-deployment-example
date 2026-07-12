@@ -41,17 +41,28 @@ variable "network_cidr" {
 
 variable "node_machine_type" {
   type        = string
-  default     = "n2-standard-8"
-  description = "Intel-backed type that supports nested virtualization; E2, AMD *D, ARM, memory-optimized, and H4D are unsupported"
+  default     = "n4-standard-8"
+  description = "Intel N4 default with nested virtualization. N4 needs Hyperdisk and gVNIC and uses NVMe automatically; E2, AMD *D, ARM, memory-optimized, and H4D are unsupported."
 }
 
 variable "node_count" {
   type        = number
   default     = 3
-  description = "Six demo services request 18 vCPUs; three n2-standard-8 nodes provide 24 vCPUs"
+  description = "Six demo services request 18 vCPUs; three n4-standard-8 nodes provide 24 vCPUs"
   validation {
     condition     = var.node_count >= 3
     error_message = "node_count must be at least 3 for the demo workload."
+  }
+}
+
+variable "node_zones" {
+  type        = list(string)
+  default     = null
+  description = "Optional three-zone regional-MIG placement override. Leave null for <region>-a, <region>-b, and <region>-c."
+
+  validation {
+    condition     = var.node_zones == null || (length(var.node_zones) == 3 && length(distinct(var.node_zones)) == 3)
+    error_message = "node_zones must contain exactly three distinct zones."
   }
 }
 

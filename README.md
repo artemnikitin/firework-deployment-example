@@ -75,7 +75,7 @@ flowchart LR
 - Optional step-ca service can issue short-lived node certs via AWS IID instead of static bootstrap tokens.
 - Observability is managed as code in Terraform (dashboards, logs, access logs, metric filters).
 
-For GCP, the control-plane roles run as GKE Autopilot workloads (Deployments + LoadBalancer Services), with secrets delivered via the Secrets Store CSI driver from Secret Manager and Workload Identity for authentication. Both planes use private VMs/nodes with Cloud NAT; the x86_64 data plane is a regional managed instance group using nested virtualization, GCS, and a global HTTPS load balancer to Traefik. See the GCP guides above for container image, DNS delegation, and TLS prerequisites.
+For GCP, the control-plane roles run as GKE Autopilot workloads. Events is exposed through GKE Gateway API using a durable Certificate Manager DNS-authorized certificate and static IP from `terraform/events-edge/gcp`; registry remains a TCP LoadBalancer. Each role has its own Workload Identity and only the Secret Manager CSI mounts it needs. Both planes use private VMs/nodes with Cloud NAT; the x86_64 data plane is a regional managed instance group using nested virtualization, GCS, and a global HTTPS load balancer to Traefik. Terraform state is local in the example stacks. See the GCP guides above for container image, DNS delegation, and TLS prerequisites.
 
 ## Cleanup
 

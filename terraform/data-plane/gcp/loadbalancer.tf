@@ -1,10 +1,10 @@
 resource "google_compute_global_address" "tenant" {
-  name = "firework-tenant-ip"
+  name = "${local.name_prefix}-tenant-ip"
 }
 
 # HTTP-to-HTTPS redirect (port 80 → 301 to HTTPS)
 resource "google_compute_url_map" "http_redirect" {
-  name = "firework-tenant-http-redirect"
+  name = "${local.name_prefix}-tenant-http-redirect"
 
   default_url_redirect {
     https_redirect         = true
@@ -14,12 +14,12 @@ resource "google_compute_url_map" "http_redirect" {
 }
 
 resource "google_compute_target_http_proxy" "redirect" {
-  name    = "firework-tenant-http-redirect"
+  name    = "${local.name_prefix}-tenant-http-redirect"
   url_map = google_compute_url_map.http_redirect.id
 }
 
 resource "google_compute_global_forwarding_rule" "tenant_http" {
-  name                  = "firework-tenant-http"
+  name                  = "${local.name_prefix}-tenant-http"
   ip_address            = google_compute_global_address.tenant.id
   port_range            = "80"
   target                = google_compute_target_http_proxy.redirect.id
@@ -27,7 +27,7 @@ resource "google_compute_global_forwarding_rule" "tenant_http" {
 }
 
 resource "google_compute_backend_service" "traefik" {
-  name                  = "firework-traefik"
+  name                  = "${local.name_prefix}-traefik"
   protocol              = "HTTP"
   port_name             = "traefik"
   load_balancing_scheme = "EXTERNAL_MANAGED"
@@ -42,12 +42,12 @@ resource "google_compute_backend_service" "traefik" {
 }
 
 resource "google_compute_url_map" "tenant" {
-  name            = "firework-tenant"
+  name            = "${local.name_prefix}-tenant"
   default_service = google_compute_backend_service.traefik.id
 }
 
 resource "google_certificate_manager_dns_authorization" "firework" {
-  name   = "firework-dns-auth"
+  name   = "${local.name_prefix}-dns-auth"
   domain = trimsuffix(var.base_domain, ".")
 }
 
@@ -60,7 +60,7 @@ resource "google_dns_record_set" "cert_authorization" {
 }
 
 resource "google_certificate_manager_certificate" "wildcard" {
-  name = "firework-wildcard"
+  name = "${local.name_prefix}-wildcard"
   managed {
     domains            = ["*.${trimsuffix(var.base_domain, ".")}"]
     dns_authorizations = [google_certificate_manager_dns_authorization.firework.id]
@@ -68,24 +68,24 @@ resource "google_certificate_manager_certificate" "wildcard" {
 }
 
 resource "google_certificate_manager_certificate_map" "firework" {
-  name = "firework-tenant-map"
+  name = "${local.name_prefix}-tenant-map"
 }
 
 resource "google_certificate_manager_certificate_map_entry" "wildcard" {
-  name         = "firework-wildcard"
+  name         = "${local.name_prefix}-wildcard"
   map          = google_certificate_manager_certificate_map.firework.name
   certificates = [google_certificate_manager_certificate.wildcard.id]
   hostname     = "*.${trimsuffix(var.base_domain, ".")}"
 }
 
 resource "google_compute_target_https_proxy" "tenant" {
-  name            = "firework-tenant"
+  name            = "${local.name_prefix}-tenant"
   url_map         = google_compute_url_map.tenant.id
   certificate_map = "//certificatemanager.googleapis.com/${google_certificate_manager_certificate_map.firework.id}"
 }
 
 resource "google_compute_global_forwarding_rule" "tenant" {
-  name                  = "firework-tenant-https"
+  name                  = "${local.name_prefix}-tenant-https"
   ip_address            = google_compute_global_address.tenant.id
   port_range            = "443"
   target                = google_compute_target_https_proxy.tenant.id

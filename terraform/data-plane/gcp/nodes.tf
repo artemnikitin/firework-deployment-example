@@ -3,11 +3,22 @@ data "google_compute_image" "firework_node" {
   project = local.node_image_project
 }
 
+locals {
+  node_machine_series = split("-", var.node_machine_type)[0]
+  node_uses_hyperdisk = contains(["c4", "n4"], local.node_machine_series)
+  node_requires_gvnic = contains(["c3", "c4", "n4"], local.node_machine_series)
+  effective_node_zones = var.node_zones == null ? [
+    "${var.gcp_region}-a",
+    "${var.gcp_region}-b",
+    "${var.gcp_region}-c",
+  ] : var.node_zones
+}
+
 resource "google_compute_instance_template" "node" {
   name_prefix    = "${local.name_prefix}-"
   machine_type   = var.node_machine_type
   can_ip_forward = true
-  tags           = ["firework-node"]
+  tags           = [local.node_network_tag]
   labels         = local.common_labels
 
   disk {
@@ -15,11 +26,15 @@ resource "google_compute_instance_template" "node" {
     auto_delete  = true
     boot         = true
     disk_size_gb = 50
-    disk_type    = "pd-ssd"
+    # N4/C4 only support Hyperdisk. Compute Engine selects the appropriate
+    # NVMe interface from the machine type; explicitly setting NVME is rejected
+    # for this boot-disk configuration. Keep pd-ssd for an N2 fallback.
+    disk_type = local.node_uses_hyperdisk ? "hyperdisk-balanced" : "pd-ssd"
   }
 
   network_interface {
     subnetwork = google_compute_subnetwork.nodes.id
+    nic_type   = local.node_requires_gvnic ? "GVNIC" : "VIRTIO_NET"
   }
 
   advanced_machine_features {
@@ -69,7 +84,7 @@ resource "google_compute_instance_template" "node" {
 }
 
 resource "google_compute_health_check" "node" {
-  name = "firework-node-health"
+  name = "${local.name_prefix}-health"
 
   http_health_check {
     port         = 8080
@@ -83,11 +98,7 @@ resource "google_compute_region_instance_group_manager" "nodes" {
   base_instance_name = "${local.name_prefix}-node"
   target_size        = var.node_count
 
-  distribution_policy_zones = [
-    "${var.gcp_region}-a",
-    "${var.gcp_region}-b",
-    "${var.gcp_region}-c",
-  ]
+  distribution_policy_zones = local.effective_node_zones
 
   version {
     instance_template = google_compute_instance_template.node.id
@@ -103,11 +114,22 @@ resource "google_compute_region_instance_group_manager" "nodes" {
     initial_delay_sec = 300
   }
 
+  # A region migration creates a new MIG before the global backend service is
+  # switched away from the old one. Without this ordering, Compute Engine
+  # rejects deletion because the old MIG is still attached to that backend.
+  lifecycle {
+    create_before_destroy = true
+  }
+
   update_policy {
-    type                         = "PROACTIVE"
-    minimal_action               = "REPLACE"
-    max_surge_fixed              = 0
-    max_unavailable_fixed        = 3
+    type           = "PROACTIVE"
+    minimal_action = "REPLACE"
+    # A regional MIG updates proportionally across all selected zones. Fixed
+    # values must therefore be zero or at least the three-zone distribution.
+    # Keep all current nodes available while one replacement is created per
+    # zone.
+    max_surge_fixed              = 3
+    max_unavailable_fixed        = 0
     instance_redistribution_type = "PROACTIVE"
   }
 }

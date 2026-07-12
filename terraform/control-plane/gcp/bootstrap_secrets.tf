@@ -3,17 +3,10 @@
 # -----------------------------------------------------------------------------
 
 locals {
-  # Generate all TLS/PKI material together from a single root CA when any of
-  # the six PKI secret IDs is absent.
-  auto_generate_tls_material = var.auto_create_demo_secrets && (
-    var.events_tls_cert_secret_id == "" ||
-    var.events_tls_key_secret_id == "" ||
-    var.registry_tls_cert_secret_id == "" ||
-    var.registry_tls_key_secret_id == "" ||
-    var.enrollment_ca_cert_secret_id == "" ||
-    var.enrollment_ca_key_secret_id == ""
-  )
-  auto_generate_bootstrap = var.auto_create_demo_secrets && var.bootstrap_token_secret_id == ""
+  # Variable validation makes PKI/bootstrap selection all-or-nothing, which
+  # prevents emitted secret IDs from diverging from the mounted certificate chain.
+  auto_generate_tls_material = var.auto_create_demo_secrets
+  auto_generate_bootstrap    = var.auto_create_demo_secrets
 
   # Effective secret IDs — prefer explicit vars, fall back to auto-generated.
   effective_webhook_secret_id            = var.webhook_secret_id

@@ -11,7 +11,7 @@ output "events_webhook_url" {
 }
 
 output "registry_url" {
-  value = var.base_domain != "" ? "https://registry.${trimsuffix(var.base_domain, ".")}:9443" : "https://${google_compute_address.registry.address}:9443"
+  value = var.base_domain != "" ? "https://registry.${trimsuffix(var.base_domain, ".")}:${var.registry_port}" : "https://${google_compute_address.registry.address}:${var.registry_port}"
 }
 
 output "registry_server_name" {

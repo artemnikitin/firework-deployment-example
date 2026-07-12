@@ -74,6 +74,9 @@ source "googlecompute" "firework_node" {
   image_name        = "${var.image_name_prefix}-{{timestamp}}"
   image_family      = "firework-node-gcp"
   image_description = "Firework node (x86_64) with Firecracker ${var.firecracker_version}"
+  image_guest_os_features = [
+    "GVNIC",
+  ]
   image_labels = {
     architecture        = "x86-64"
     firecracker_version = replace(var.firecracker_version, ".", "-")

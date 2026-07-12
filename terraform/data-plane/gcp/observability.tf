@@ -37,39 +37,6 @@ resource "google_logging_metric" "health_check_failed" {
   }
 }
 
-resource "google_logging_metric" "controller_no_nodes_discovered" {
-  name   = "${local.name_prefix}-controller-no-nodes-discovered"
-  filter = "${local.agent_log_filter} AND textPayload:\"no active nodes available for scheduling\""
-
-  metric_descriptor {
-    metric_kind = "DELTA"
-    value_type  = "INT64"
-    unit        = "1"
-  }
-}
-
-resource "google_logging_metric" "controller_insufficient_capacity" {
-  name   = "${local.name_prefix}-controller-insufficient-capacity"
-  filter = "${local.agent_log_filter} AND textPayload:\"insufficient capacity\""
-
-  metric_descriptor {
-    metric_kind = "DELTA"
-    value_type  = "INT64"
-    unit        = "1"
-  }
-}
-
-resource "google_logging_metric" "controller_placement_read_failed" {
-  name   = "${local.name_prefix}-controller-placement-read-failed"
-  filter = "${local.agent_log_filter} AND textPayload:\"placement read failed\""
-
-  metric_descriptor {
-    metric_kind = "DELTA"
-    value_type  = "INT64"
-    unit        = "1"
-  }
-}
-
 # Legacy generic error metric (kept for backward compat with existing alerts)
 resource "google_logging_metric" "agent_errors" {
   name   = "${local.name_prefix}-agent-errors"
@@ -106,7 +73,7 @@ resource "google_storage_bucket" "lb_access_logs" {
 resource "google_logging_project_sink" "lb_access" {
   name                   = "${local.name_prefix}-lb-access"
   destination            = "storage.googleapis.com/${google_storage_bucket.lb_access_logs.name}"
-  filter                 = "resource.type=\"http_load_balancer\" AND resource.labels.forwarding_rule_name:(\"firework-tenant-https\" OR \"firework-tenant-http\")"
+  filter                 = "resource.type=\"http_load_balancer\" AND resource.labels.forwarding_rule_name:(\"${local.name_prefix}-tenant-https\" OR \"${local.name_prefix}-tenant-http\")"
   unique_writer_identity = true
 }
 
@@ -216,7 +183,7 @@ resource "google_monitoring_dashboard" "firework" {
             dataSets = [{
               timeSeriesQuery = {
                 timeSeriesFilter = {
-                  filter      = "metric.type=\"logging.googleapis.com/user/${local.name_prefix}-controller-no-nodes-discovered\""
+                  filter      = "metric.type=\"logging.googleapis.com/user/${local.controlplane_name_prefix}-controller-no-nodes-discovered\""
                   aggregation = { alignmentPeriod = "300s", perSeriesAligner = "ALIGN_SUM" }
                 }
               }
@@ -229,7 +196,7 @@ resource "google_monitoring_dashboard" "firework" {
             dataSets = [{
               timeSeriesQuery = {
                 timeSeriesFilter = {
-                  filter      = "metric.type=\"logging.googleapis.com/user/${local.name_prefix}-controller-insufficient-capacity\""
+                  filter      = "metric.type=\"logging.googleapis.com/user/${local.controlplane_name_prefix}-controller-insufficient-capacity\""
                   aggregation = { alignmentPeriod = "300s", perSeriesAligner = "ALIGN_SUM" }
                 }
               }
@@ -242,7 +209,7 @@ resource "google_monitoring_dashboard" "firework" {
             dataSets = [{
               timeSeriesQuery = {
                 timeSeriesFilter = {
-                  filter      = "metric.type=\"logging.googleapis.com/user/${local.name_prefix}-controller-placement-read-failed\""
+                  filter      = "metric.type=\"logging.googleapis.com/user/${local.controlplane_name_prefix}-controller-placement-read-failed\""
                   aggregation = { alignmentPeriod = "300s", perSeriesAligner = "ALIGN_SUM" }
                 }
               }

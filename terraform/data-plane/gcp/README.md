@@ -1,29 +1,48 @@
 # GCP data plane
 
 This stack creates a private managed instance group of x86_64 Firework nodes,
-Cloud NAT, an amd64 GCS image bucket, and a global HTTPS load balancer that
+Cloud NAT, and a global HTTPS load balancer that
 terminates TLS and forwards HTTP to Traefik on port 8080.
+
+Terraform state is **local**. The stack auto-wires control-plane outputs from
+the local control-plane state file by default.
 
 Prerequisites:
 
 - Build the `firework-node-gcp` image family with `packer/gcp`.
-- Apply `terraform/control-plane/gcp` and copy its outputs into `terraform.tfvars`.
+- Apply `terraform/control-plane/gcp`; the default local-state wiring reads its outputs automatically.
 - Create and delegate the pre-existing Cloud DNS zone.
-- Grant the Terraform service account Service Account User on the node runtime
-  service account.
-- Create a separate GCS Terraform-state bucket.
+- Grant the Terraform principal `roles/iam.serviceAccountUser` at project scope
+  before the first apply, so it can attach the node service account Terraform creates.
 
 The default node count is three because the six demo services request 18 vCPUs
-and each `n2-standard-8` node provides 8 vCPUs. Use four nodes for N+1 capacity.
-Verify the selected Intel machine family supports nested virtualization in the
-chosen zone before applying.
+and each `n4-standard-8` node provides 8 vCPUs. N4 requires a Packer image
+advertising gVNIC support plus Hyperdisk and gVNIC in the instance template.
+Compute Engine selects its required NVMe disk interface automatically. Updates
+create one replacement in each selected zone before old nodes are removed, so
+ensure quota for three temporary surge nodes. Use four nodes for N+1 capacity.
+
+Before changing an existing deployment to N4, confirm that the selected node
+image declares the `GVNIC` guest OS feature. Images built by this Packer
+configuration do. Applying this stack creates a new template and rolls every
+node.
+
+`node_zones` optionally overrides the regional MIG's three zones. For a
+`us-central1` deployment, use `us-central1-a`, `us-central1-b`, and
+`us-central1-f` to avoid the exhausted `us-central1-c` pool. Changing the zone
+set replaces the regional MIG; Google does not support changing it in place.
+
+To move the data plane to another region, change `gcp_region`, set three zones
+in that region with `node_zones`, and use a new non-overlapping `network_cidr`.
+The MIG uses create-before-destroy so Terraform can switch the global backend
+service to the replacement MIG before deleting the old one. The regional
+subnet, Cloud NAT/router, MIG, and log buckets are recreated; the global tenant
+IP, DNS record, and frontend remain managed in place.
 
 ```bash
 cd terraform/data-plane/gcp
 cp terraform.tfvars.example terraform.tfvars
-terraform init \
-  -backend-config="bucket=firework-tfstate-YOUR_PROJECT" \
-  -backend-config="prefix=data-plane/gcp"
+terraform init
 terraform validate
 terraform apply
 ```

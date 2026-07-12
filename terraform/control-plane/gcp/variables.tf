@@ -19,6 +19,30 @@ variable "events_domain" {
   description = "Public events webhook hostname"
 }
 
+variable "use_events_edge_remote_state" {
+  type        = bool
+  default     = true
+  description = "Read the durable Events edge outputs from local Terraform state."
+}
+
+variable "events_edge_state_path" {
+  type        = string
+  default     = "../../events-edge/gcp/terraform.tfstate"
+  description = "Path to the durable Events edge terraform.tfstate (absolute or relative to this module)."
+}
+
+variable "events_gateway_address_name" {
+  type        = string
+  default     = ""
+  description = "Reserved global address name for the Events Gateway. Auto-filled from Events edge state when enabled."
+}
+
+variable "events_certificate_map_name" {
+  type        = string
+  default     = ""
+  description = "Certificate Manager map name for the Events Gateway. Auto-filled from Events edge state when enabled."
+}
+
 variable "base_domain" {
   type        = string
   default     = ""
@@ -102,16 +126,26 @@ variable "controller_tick" {
   description = "Controller reconcile loop period."
 }
 
-variable "events_listen_addr" {
-  type        = string
-  default     = ":9444"
-  description = "Listen address for the events role inside the container."
+variable "events_port" {
+  type        = number
+  default     = 9444
+  description = "HTTPS port for the events role and its GKE Service backend."
+
+  validation {
+    condition     = var.events_port > 0 && var.events_port < 65536
+    error_message = "events_port must be a valid TCP port."
+  }
 }
 
-variable "registry_listen_addr" {
-  type        = string
-  default     = ":9443"
-  description = "Listen address for the registry role inside the container."
+variable "registry_port" {
+  type        = number
+  default     = 9443
+  description = "HTTPS port for the registry role and its external load balancer."
+
+  validation {
+    condition     = var.registry_port > 0 && var.registry_port < 65536
+    error_message = "registry_port must be a valid TCP port."
+  }
 }
 
 variable "registry_node_cert_ttl" {
@@ -154,7 +188,28 @@ variable "reconcile_on_start" {
 variable "auto_create_demo_secrets" {
   type        = bool
   default     = true
-  description = "When true, Terraform auto-generates TLS certs, enrollment CA, and bootstrap token and stores them in Secret Manager. Set to false and supply all *_secret_id vars to bring your own."
+  description = "When true, Terraform generates all TLS/PKI material and the bootstrap token. When false, supply every *_secret_id variable to bring your own. Partial overrides are intentionally rejected."
+
+  validation {
+    condition = var.auto_create_demo_secrets ? alltrue([
+      var.bootstrap_token_secret_id == "",
+      var.events_tls_cert_secret_id == "",
+      var.events_tls_key_secret_id == "",
+      var.registry_tls_cert_secret_id == "",
+      var.registry_tls_key_secret_id == "",
+      var.enrollment_ca_cert_secret_id == "",
+      var.enrollment_ca_key_secret_id == "",
+      ]) : alltrue([
+      var.bootstrap_token_secret_id != "",
+      var.events_tls_cert_secret_id != "",
+      var.events_tls_key_secret_id != "",
+      var.registry_tls_cert_secret_id != "",
+      var.registry_tls_key_secret_id != "",
+      var.enrollment_ca_cert_secret_id != "",
+      var.enrollment_ca_key_secret_id != "",
+    ])
+    error_message = "Use either fully auto-generated TLS/PKI material or provide every TLS, enrollment CA, and bootstrap-token secret ID; partial overrides are unsupported."
+  }
 }
 
 variable "auto_generated_tls_validity_hours" {
@@ -175,43 +230,43 @@ variable "webhook_secret_id" {
 variable "bootstrap_token_secret_id" {
   type        = string
   default     = ""
-  description = "Secret Manager secret ID for the node bootstrap token. Auto-generated when empty and auto_create_demo_secrets = true."
+  description = "Secret Manager secret ID for the node bootstrap token. Required with every other PKI secret ID when auto_create_demo_secrets is false."
 }
 
 variable "events_tls_cert_secret_id" {
   type        = string
   default     = ""
-  description = "Secret Manager secret ID for the events server TLS cert PEM. Auto-generated when empty and auto_create_demo_secrets = true."
+  description = "Secret Manager secret ID for the events server TLS cert PEM. Required with every other PKI secret ID when auto_create_demo_secrets is false."
 }
 
 variable "events_tls_key_secret_id" {
   type        = string
   default     = ""
-  description = "Secret Manager secret ID for the events server TLS private key PEM. Auto-generated when empty and auto_create_demo_secrets = true."
+  description = "Secret Manager secret ID for the events server TLS private key PEM. Required with every other PKI secret ID when auto_create_demo_secrets is false."
 }
 
 variable "registry_tls_cert_secret_id" {
   type        = string
   default     = ""
-  description = "Secret Manager secret ID for the registry server TLS cert PEM. Auto-generated when empty and auto_create_demo_secrets = true."
+  description = "Secret Manager secret ID for the registry server TLS cert PEM. Required with every other PKI secret ID when auto_create_demo_secrets is false."
 }
 
 variable "registry_tls_key_secret_id" {
   type        = string
   default     = ""
-  description = "Secret Manager secret ID for the registry server TLS private key PEM. Auto-generated when empty and auto_create_demo_secrets = true."
+  description = "Secret Manager secret ID for the registry server TLS private key PEM. Required with every other PKI secret ID when auto_create_demo_secrets is false."
 }
 
 variable "enrollment_ca_cert_secret_id" {
   type        = string
   default     = ""
-  description = "Secret Manager secret ID for the enrollment CA cert PEM. Auto-generated when empty and auto_create_demo_secrets = true."
+  description = "Secret Manager secret ID for the enrollment CA cert PEM. Required with every other PKI secret ID when auto_create_demo_secrets is false."
 }
 
 variable "enrollment_ca_key_secret_id" {
   type        = string
   default     = ""
-  description = "Secret Manager secret ID for the enrollment CA private key PEM. Auto-generated when empty and auto_create_demo_secrets = true."
+  description = "Secret Manager secret ID for the enrollment CA private key PEM. Required with every other PKI secret ID when auto_create_demo_secrets is false."
 }
 
 variable "github_token_secret_id" {
@@ -221,12 +276,6 @@ variable "github_token_secret_id" {
 }
 
 # --- Network exposure ---
-
-variable "events_allowed_cidrs" {
-  type        = list(string)
-  default     = ["0.0.0.0/0"]
-  description = "Source CIDRs allowed to reach the events webhook load balancer."
-}
 
 variable "registry_allowed_cidrs" {
   type        = list(string)
