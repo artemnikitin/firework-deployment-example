@@ -5,6 +5,9 @@ project_name = "firework-demo"
 
 # GHCR image with firework-controlplane binary.
 controlplane_image = "ghcr.io/your-org/firework-controlplane:latest"
+# When reusing a mutable image tag, update this to the newly published digest
+# so Terraform replaces the running ECS tasks.
+# controlplane_deployment_revision = "sha256:0123456789abcdef"
 
 # Events HTTPS listener certificate:
 # Optionally provide an existing ACM cert ARN; otherwise the stack creates one.

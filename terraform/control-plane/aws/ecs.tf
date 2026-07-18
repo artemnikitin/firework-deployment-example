@@ -516,11 +516,16 @@ resource "aws_ecs_task_definition" "controller" {
 }
 
 resource "aws_ecs_service" "events" {
-  name            = "${var.project_name}-controlplane-events"
-  cluster         = aws_ecs_cluster.controlplane.id
-  task_definition = aws_ecs_task_definition.events.arn
-  desired_count   = var.events_desired_count
-  launch_type     = "FARGATE"
+  name                 = "${var.project_name}-controlplane-events"
+  cluster              = aws_ecs_cluster.controlplane.id
+  task_definition      = aws_ecs_task_definition.events.arn
+  desired_count        = var.events_desired_count
+  launch_type          = "FARGATE"
+  force_new_deployment = true
+
+  triggers = {
+    controlplane_deployment_revision = var.controlplane_deployment_revision
+  }
 
   network_configuration {
     subnets          = [for subnet in aws_subnet.public : subnet.id]
@@ -545,11 +550,16 @@ resource "aws_ecs_service" "events" {
 }
 
 resource "aws_ecs_service" "registry" {
-  name            = "${var.project_name}-controlplane-registry"
-  cluster         = aws_ecs_cluster.controlplane.id
-  task_definition = aws_ecs_task_definition.registry.arn
-  desired_count   = var.registry_desired_count
-  launch_type     = "FARGATE"
+  name                 = "${var.project_name}-controlplane-registry"
+  cluster              = aws_ecs_cluster.controlplane.id
+  task_definition      = aws_ecs_task_definition.registry.arn
+  desired_count        = var.registry_desired_count
+  launch_type          = "FARGATE"
+  force_new_deployment = true
+
+  triggers = {
+    controlplane_deployment_revision = var.controlplane_deployment_revision
+  }
 
   network_configuration {
     subnets          = [for subnet in aws_subnet.public : subnet.id]
@@ -574,11 +584,16 @@ resource "aws_ecs_service" "registry" {
 }
 
 resource "aws_ecs_service" "controller" {
-  name            = "${var.project_name}-controlplane-controller"
-  cluster         = aws_ecs_cluster.controlplane.id
-  task_definition = aws_ecs_task_definition.controller.arn
-  desired_count   = var.controller_desired_count
-  launch_type     = "FARGATE"
+  name                 = "${var.project_name}-controlplane-controller"
+  cluster              = aws_ecs_cluster.controlplane.id
+  task_definition      = aws_ecs_task_definition.controller.arn
+  desired_count        = var.controller_desired_count
+  launch_type          = "FARGATE"
+  force_new_deployment = true
+
+  triggers = {
+    controlplane_deployment_revision = var.controlplane_deployment_revision
+  }
 
   network_configuration {
     subnets          = [for subnet in aws_subnet.public : subnet.id]

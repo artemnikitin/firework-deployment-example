@@ -321,9 +321,10 @@ resource "kubernetes_deployment" "events" {
         service_account_name = kubernetes_service_account.controlplane["events"].metadata[0].name
 
         container {
-          name    = "controlplane"
-          image   = var.controlplane_image
-          command = ["/bin/sh", "-ec"]
+          name              = "controlplane"
+          image             = var.controlplane_image
+          image_pull_policy = "Always"
+          command           = ["/bin/sh", "-ec"]
           args = [var.github_token_secret_id != "" ?
             "export GITHUB_TOKEN=\"$(cat ${local.secrets_mount}/secrets/github-token)\"; exec /usr/local/bin/firework-controlplane --config ${local.config_file}" :
             "exec /usr/local/bin/firework-controlplane --config ${local.config_file}"
@@ -414,9 +415,10 @@ resource "kubernetes_deployment" "registry" {
         service_account_name = kubernetes_service_account.controlplane["registry"].metadata[0].name
 
         container {
-          name  = "controlplane"
-          image = var.controlplane_image
-          args  = ["--config", local.config_file]
+          name              = "controlplane"
+          image             = var.controlplane_image
+          image_pull_policy = "Always"
+          args              = ["--config", local.config_file]
 
           port {
             name           = "registry"
@@ -491,9 +493,10 @@ resource "kubernetes_deployment" "controller" {
         service_account_name = kubernetes_service_account.controlplane["controller"].metadata[0].name
 
         container {
-          name  = "controlplane"
-          image = var.controlplane_image
-          args  = ["--config", local.config_file]
+          name              = "controlplane"
+          image             = var.controlplane_image
+          image_pull_policy = "Always"
+          args              = ["--config", local.config_file]
 
           resources {
             requests = {
@@ -546,9 +549,10 @@ resource "kubernetes_deployment" "api" {
         service_account_name = kubernetes_service_account.controlplane["api"].metadata[0].name
 
         container {
-          name  = "controlplane"
-          image = var.controlplane_image
-          args  = ["--config", local.config_file]
+          name              = "controlplane"
+          image             = var.controlplane_image
+          image_pull_policy = "Always"
+          args              = ["--config", local.config_file]
 
           port {
             name           = "api"

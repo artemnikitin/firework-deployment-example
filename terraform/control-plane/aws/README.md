@@ -45,6 +45,11 @@ For a demo deployment, only these are required in `terraform.tfvars`:
 
 Everything else can use defaults and auto-generated secrets.
 
+When `controlplane_image` uses a mutable tag such as `dev`, set
+`controlplane_deployment_revision` to the published image digest after every
+push. Changing the revision forces all control-plane ECS services to start new
+Fargate tasks, which pull the current image.
+
 If you enable `reconcile_on_start`, you must also set `git_repo_url`.
 
 ## Deploy

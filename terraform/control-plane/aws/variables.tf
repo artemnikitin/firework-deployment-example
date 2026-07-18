@@ -177,6 +177,12 @@ variable "controlplane_image" {
   type        = string
 }
 
+variable "controlplane_deployment_revision" {
+  description = "Opaque revision changed to redeploy ECS services when controlplane_image uses a mutable tag. Set this to the published image digest."
+  type        = string
+  default     = ""
+}
+
 variable "controlplane_binary_path" {
   description = "Path to firework-controlplane binary inside the container image."
   type        = string
