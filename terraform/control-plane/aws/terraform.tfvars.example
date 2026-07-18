@@ -6,13 +6,18 @@ project_name = "firework-demo"
 # GHCR image with firework-controlplane binary.
 controlplane_image = "ghcr.io/your-org/firework-controlplane:latest"
 
-# Events HTTPS listener certificate (choose one option):
-# Option A: provide an existing ACM cert ARN.
+# Events HTTPS listener certificate:
+# Optionally provide an existing ACM cert ARN; otherwise the stack creates one.
 # events_acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-# Option B: auto-create ACM cert + DNS validation in Route53.
 events_domain_name = "events.example.com"
+# Optional; defaults to status.<events domain suffix> (status.example.com here).
+# status_domain_name = "status.example.com"
 # Optional zone override (if omitted, derived from events_domain_name by stripping the first label).
 # events_hosted_zone_name = "example.com"
+# status_hosted_zone_name = "example.com"
+# Set this when supplying a pre-existing certificate instead of allowing the
+# stack to create one for the status hostname.
+# status_acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
 
 # GitOps input filtering.
 target_branch = "main"
@@ -33,6 +38,7 @@ auto_create_demo_secrets = true
 
 # Optional explicit Secrets Manager ARNs (override auto-generated values when set).
 # github_webhook_secret_secret_arn      = "arn:aws:secretsmanager:us-east-1:123456789012:secret:firework-github-webhook-xxxxx"
+# operator_token_secret_arn             = "arn:aws:secretsmanager:us-east-1:123456789012:secret:firework-operator-token-xxxxx"
 # events_tls_cert_secret_arn            = "arn:aws:secretsmanager:us-east-1:123456789012:secret:firework-events-tls-cert-xxxxx"
 # events_tls_key_secret_arn             = "arn:aws:secretsmanager:us-east-1:123456789012:secret:firework-events-tls-key-xxxxx"
 # registry_tls_cert_secret_arn          = "arn:aws:secretsmanager:us-east-1:123456789012:secret:firework-registry-tls-cert-xxxxx"

@@ -2,6 +2,10 @@ output "events_domain" {
   value = trimsuffix(var.events_domain, ".")
 }
 
+output "status_domain" {
+  value = trimsuffix(var.status_domain, ".")
+}
+
 output "events_address" {
   value = google_compute_global_address.events.address
 }
@@ -16,4 +20,8 @@ output "events_certificate_map_name" {
 
 output "events_certificate_name" {
   value = google_certificate_manager_certificate.events.name
+}
+
+output "status_certificate_name" {
+  value = google_certificate_manager_certificate.status.name
 }

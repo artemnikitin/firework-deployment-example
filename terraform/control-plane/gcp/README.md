@@ -1,6 +1,11 @@
 # GCP control plane
 
-This stack deploys the Firework control-plane on **GKE Autopilot**. Three roles (events, registry, controller) run as Kubernetes Deployments in a regional cluster. Secrets are delivered via the Secrets Store CSI driver from Secret Manager. State and rendered node configs are stored in GCS via native ADC/Workload Identity — no HMAC keys or S3-shim.
+This stack deploys the Firework control-plane on **GKE Autopilot**. Four roles
+(events, registry, controller, and the read-only API/UI) run as Kubernetes
+Deployments in a regional cluster. Secrets are delivered via the Secrets Store
+CSI driver from Secret Manager. State and rendered node configs are stored in
+GCS via native ADC/Workload Identity — no HMAC keys or S3-shim. The API service
+account has `roles/storage.objectViewer`; mutating roles retain object admin.
 
 Terraform state is **local** (no remote backend). The state file lives at `terraform.tfstate` in this directory.
 
@@ -76,6 +81,7 @@ Terraform will create and populate the following secrets automatically on first 
 - `firework-cp-events-tls-cert` / `firework-cp-events-tls-key` — events server TLS
 - `firework-cp-registry-tls-cert` / `firework-cp-registry-tls-key` — registry server TLS
 - `firework-cp-bootstrap-token` — node self-enrollment token
+- `firework-cp-operator-token` — read-only API/CLI/UI operator token
 
 To bring your own certs instead, set `auto_create_demo_secrets = false` and supply all `*_secret_id` variables pointing to your pre-created secrets. Partial overrides are rejected because the registry certificate and enrollment CA must stay in one trust chain.
 
@@ -91,9 +97,10 @@ controlplane_image = "ghcr.io/artemnikitin/firework-controlplane:v0.1.0"
 
 ## Deploy
 
-First apply the durable Events edge and wait for its Certificate Manager
-certificate to become `ACTIVE`. This is a one-time prerequisite for a hostname;
-keep it after tearing down a control plane:
+First apply the durable Events edge and wait for both its events and status
+Certificate Manager certificates to become `ACTIVE`. These are one-time
+prerequisites for the two hostnames; keep them after tearing down a control
+plane:
 
 ```bash
 cd terraform/events-edge/gcp
@@ -108,8 +115,8 @@ Then deploy the disposable control plane:
 ```bash
 cd terraform/control-plane/gcp
 cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars — fill in gcp_project, events_domain, state_bucket_name,
-# controlplane_image, git_repo_url, and webhook_secret_id.
+# Edit terraform.tfvars — fill in gcp_project, events_domain, status_domain,
+# state_bucket_name, controlplane_image, git_repo_url, and webhook_secret_id.
 terraform init
 terraform apply
 ```
@@ -120,11 +127,12 @@ which defers API discovery until apply after GKE is available. GKE's managed CSI
 add-on can take a short time to register its CRD; Terraform retries that step
 automatically.
 
-The control plane enables Gateway API and reads the Events edge IP and
-Certificate Manager map from `../../events-edge/gcp/terraform.tfstate`. Do not
-destroy the edge stack during ordinary control-plane rebuilds. If its state is
-elsewhere, set `events_edge_state_path`; alternatively set both
-`events_gateway_address_name` and `events_certificate_map_name` explicitly.
+The control plane enables Gateway API and reads the shared edge IP, Certificate
+Manager map, and status hostname from
+`../../events-edge/gcp/terraform.tfstate`. Do not destroy the edge stack during
+ordinary control-plane rebuilds. If its state is elsewhere, set
+`events_edge_state_path`; alternatively set the address, certificate-map, and
+status-domain inputs explicitly.
 
 Key outputs you'll need for the data-plane:
 
@@ -135,14 +143,29 @@ terraform output registry_server_name       # pass as data-plane registry_server
 terraform output registry_ca_secret_id      # pass as data-plane registry_ca_secret_id
 terraform output registry_bootstrap_token_secret_id
 terraform output events_webhook_url         # configure as GitHub webhook target
+terraform output api_url                    # open the UI or configure fireworkctl
+terraform output status_domain              # dedicated UI/API hostname
+terraform output operator_token_secret_id   # retrieve explicitly from Secret Manager
 ```
 
 If `use_control_plane_remote_state = true` in the data-plane (the default), it reads these from `../../control-plane/gcp/terraform.tfstate` automatically — no manual copying needed.
 
-The GKE Gateway binds the durable Events IP and Certificate Manager map during
+The GKE Gateway binds the durable public IP and Certificate Manager map during
 this apply. Configure the GitHub webhook only after the Gateway is ready and
-the Events edge certificate is `ACTIVE`; the internal demo certificate is never
-exposed to GitHub.
+both public certificates are `ACTIVE`; the internal demo certificate is never
+exposed publicly. The events hostname routes only the exact webhook path, while
+the status hostname routes to the authenticated API/UI.
+
+Retrieve the operator token without placing it in Terraform output or shell
+history, write it to a mode-0600 file, and point the CLI at that file:
+
+```bash
+gcloud secrets versions access latest \
+  --secret="$(terraform output -raw operator_token_secret_id)" > operator-token
+chmod 0600 operator-token
+fireworkctl --endpoint "$(terraform output -raw api_url)" \
+  --token-file operator-token nodes
+```
 
 ---
 

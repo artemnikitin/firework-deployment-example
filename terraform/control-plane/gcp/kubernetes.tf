@@ -76,6 +76,25 @@ locals {
     controller_tick       = var.controller_tick
   })
 
+  api_config = yamlencode({
+    role            = "api"
+    api_listen_addr = ":${var.api_port}"
+    state = {
+      backend = "gcs"
+      prefix  = var.state_prefix
+      gcs = {
+        bucket  = google_storage_bucket.state.name
+        project = var.gcp_project
+      }
+    }
+    node_stale_ttl      = var.node_stale_ttl
+    operator_token_file = "${local.secrets_mount}/secrets/operator-token"
+    tls = {
+      cert_file = "${local.secrets_mount}/tls/server.crt"
+      key_file  = "${local.secrets_mount}/tls/server.key"
+    }
+  })
+
   events_csi_secrets = concat([
     {
       resourceName = "projects/${var.gcp_project}/secrets/${local.effective_webhook_secret_id}/versions/latest"
@@ -114,6 +133,21 @@ locals {
     {
       resourceName = "projects/${var.gcp_project}/secrets/${local.effective_enrollment_ca_key_secret_id}/versions/latest"
       path         = "tls/enrollment-ca.key"
+    },
+  ]
+
+  api_csi_secrets = [
+    {
+      resourceName = "projects/${var.gcp_project}/secrets/${local.effective_events_tls_cert_secret_id}/versions/latest"
+      path         = "tls/server.crt"
+    },
+    {
+      resourceName = "projects/${var.gcp_project}/secrets/${local.effective_events_tls_key_secret_id}/versions/latest"
+      path         = "tls/server.key"
+    },
+    {
+      resourceName = "projects/${var.gcp_project}/secrets/${local.effective_operator_token_secret_id}/versions/latest"
+      path         = "secrets/operator-token"
     },
   ]
 }
@@ -195,6 +229,31 @@ resource "kubectl_manifest" "registry_secret_provider_class" {
   ]
 }
 
+resource "kubectl_manifest" "api_secret_provider_class" {
+  yaml_body = yamlencode({
+    apiVersion = "secrets-store.csi.x-k8s.io/v1"
+    kind       = "SecretProviderClass"
+    metadata = {
+      name      = "firework-api-secrets"
+      namespace = kubernetes_namespace.firework.metadata[0].name
+    }
+    spec = {
+      provider = "gke"
+      parameters = {
+        secrets = yamlencode(local.api_csi_secrets)
+      }
+    }
+  })
+
+  validate_schema = false
+
+  depends_on = [
+    google_container_cluster.control_plane,
+    kubernetes_namespace.firework,
+    google_secret_manager_secret_iam_member.controlplane_accessor,
+  ]
+}
+
 # ---------------------------------------------------------------------------
 # ConfigMaps (one per role — no secret values)
 # ---------------------------------------------------------------------------
@@ -226,6 +285,16 @@ resource "kubernetes_config_map" "controller" {
   }
   data = {
     "controlplane.yaml" = local.controller_config
+  }
+}
+
+resource "kubernetes_config_map" "api" {
+  metadata {
+    name      = "firework-api-config"
+    namespace = kubernetes_namespace.firework.metadata[0].name
+  }
+  data = {
+    "controlplane.yaml" = local.api_config
   }
 }
 
@@ -458,8 +527,96 @@ resource "kubernetes_deployment" "controller" {
   ]
 }
 
+resource "kubernetes_deployment" "api" {
+  metadata {
+    name      = "firework-api"
+    namespace = kubernetes_namespace.firework.metadata[0].name
+    labels    = merge(local.common_labels, { role = "api" })
+  }
+  spec {
+    replicas = var.api_replicas
+    selector {
+      match_labels = { role = "api" }
+    }
+    template {
+      metadata {
+        labels = merge(local.common_labels, { role = "api" })
+      }
+      spec {
+        service_account_name = kubernetes_service_account.controlplane["api"].metadata[0].name
+
+        container {
+          name  = "controlplane"
+          image = var.controlplane_image
+          args  = ["--config", local.config_file]
+
+          port {
+            name           = "api"
+            container_port = var.api_port
+            protocol       = "TCP"
+          }
+
+          resources {
+            requests = {
+              cpu    = "250m"
+              memory = "512Mi"
+            }
+          }
+
+          readiness_probe {
+            http_get {
+              path   = "/healthz"
+              port   = var.api_port
+              scheme = "HTTPS"
+            }
+            initial_delay_seconds = 10
+            period_seconds        = 15
+            failure_threshold     = 3
+          }
+
+          volume_mount {
+            name       = "config"
+            mount_path = local.config_mount
+            read_only  = true
+          }
+
+          volume_mount {
+            name       = "secrets"
+            mount_path = local.secrets_mount
+            read_only  = true
+          }
+        }
+
+        volume {
+          name = "config"
+          config_map {
+            name = kubernetes_config_map.api.metadata[0].name
+          }
+        }
+
+        volume {
+          name = "secrets"
+          csi {
+            driver    = "secrets-store-gke.csi.k8s.io"
+            read_only = true
+            volume_attributes = {
+              secretProviderClass = "firework-api-secrets"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [
+    kubectl_manifest.api_secret_provider_class,
+    google_storage_bucket_iam_member.state_object_viewer,
+    google_service_account_iam_member.workload_identity,
+  ]
+}
+
 # ---------------------------------------------------------------------------
-# Services and Gateway API routing for events (GKE L7 HTTPS LB with Certificate Manager)
+# Services and hostname-separated Gateway API routing (GKE L7 HTTPS LB)
 # ---------------------------------------------------------------------------
 
 resource "kubernetes_service" "events" {
@@ -476,6 +633,26 @@ resource "kubernetes_service" "events" {
       name         = "https"
       port         = var.events_port
       target_port  = var.events_port
+      protocol     = "TCP"
+      app_protocol = "HTTPS"
+    }
+  }
+}
+
+resource "kubernetes_service" "api" {
+  metadata {
+    name      = "firework-api"
+    namespace = kubernetes_namespace.firework.metadata[0].name
+    labels    = merge(local.common_labels, { role = "api" })
+  }
+  spec {
+    type     = "ClusterIP"
+    selector = { role = "api" }
+
+    port {
+      name         = "https"
+      port         = var.api_port
+      target_port  = var.api_port
       protocol     = "TCP"
       app_protocol = "HTTPS"
     }
@@ -504,7 +681,6 @@ resource "kubectl_manifest" "events_gateway" {
         name     = "https"
         protocol = "HTTPS"
         port     = 443
-        hostname = trimsuffix(var.events_domain, ".")
         allowedRoutes = {
           namespaces = {
             from = "Same"
@@ -538,6 +714,46 @@ resource "kubectl_manifest" "events_route" {
         sectionName = "https"
       }]
       hostnames = [trimsuffix(var.events_domain, ".")]
+      rules = [
+        {
+          matches = [{
+            path = {
+              type  = "Exact"
+              value = "/v1/events/github"
+            }
+          }]
+          backendRefs = [{
+            name = kubernetes_service.events.metadata[0].name
+            port = var.events_port
+          }]
+        }
+      ]
+    }
+  })
+
+  validate_schema = false
+
+  depends_on = [
+    kubectl_manifest.events_gateway,
+    kubernetes_service.events,
+  ]
+}
+
+resource "kubectl_manifest" "status_route" {
+  yaml_body = yamlencode({
+    apiVersion = "gateway.networking.k8s.io/v1"
+    kind       = "HTTPRoute"
+    metadata = {
+      name      = "firework-status"
+      namespace = kubernetes_namespace.firework.metadata[0].name
+      labels    = merge(local.common_labels, { role = "api" })
+    }
+    spec = {
+      parentRefs = [{
+        name        = "firework-events"
+        sectionName = "https"
+      }]
+      hostnames = [local.effective_status_domain]
       rules = [{
         matches = [{
           path = {
@@ -546,8 +762,8 @@ resource "kubectl_manifest" "events_route" {
           }
         }]
         backendRefs = [{
-          name = kubernetes_service.events.metadata[0].name
-          port = var.events_port
+          name = kubernetes_service.api.metadata[0].name
+          port = var.api_port
         }]
       }]
     }
@@ -557,7 +773,7 @@ resource "kubectl_manifest" "events_route" {
 
   depends_on = [
     kubectl_manifest.events_gateway,
-    kubernetes_service.events,
+    kubernetes_service.api,
   ]
 }
 
@@ -599,6 +815,45 @@ resource "kubectl_manifest" "events_health_check" {
   depends_on = [
     kubectl_manifest.events_route,
     kubernetes_service.events,
+  ]
+}
+
+resource "kubectl_manifest" "api_health_check" {
+  yaml_body = yamlencode({
+    apiVersion = "networking.gke.io/v1"
+    kind       = "HealthCheckPolicy"
+    metadata = {
+      name      = "firework-api"
+      namespace = kubernetes_namespace.firework.metadata[0].name
+    }
+    spec = {
+      default = {
+        checkIntervalSec   = 15
+        timeoutSec         = 5
+        healthyThreshold   = 1
+        unhealthyThreshold = 3
+        config = {
+          type = "HTTPS"
+          httpsHealthCheck = {
+            portSpecification = "USE_FIXED_PORT"
+            port              = var.api_port
+            requestPath       = "/healthz"
+          }
+        }
+      }
+      targetRef = {
+        group = ""
+        kind  = "Service"
+        name  = kubernetes_service.api.metadata[0].name
+      }
+    }
+  })
+
+  validate_schema = false
+
+  depends_on = [
+    kubectl_manifest.status_route,
+    kubernetes_service.api,
   ]
 }
 

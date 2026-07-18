@@ -20,12 +20,14 @@ flowchart LR
     direction LR
 
     subgraph ControlPlane["Control plane (ECS/Fargate, role-separated)"]
-      EventsALB --> Events["events service"]
+      EventsALB --> Events["events service (/v1/events/github)"]
+      EventsALB --> API["read-only API + UI"]
       Events --> S3Configs["S3 configs/state bucket"]
       RegistryNLB["Registry NLB :9443"] --> Registry["registry service"]
       StepCANLB["step-ca NLB :9000 (optional)"] --> StepCA["step-ca service"]
       Registry --> S3Configs
       Controller["controller service"] --> S3Configs
+      API -->|read-only| S3Configs
     end
 
     subgraph Public["Public subnets"]
@@ -74,8 +76,21 @@ flowchart LR
 - Each platform's domain variable is the single source of truth for DNS, the wildcard TLS certificate, and the agent `ingress_domain`. GitOps services set `metadata.subdomain: <label>` and resolve to `<subdomain>.<domain>` — `<subdomain>.<domain_name>` on AWS and `<subdomain>.<base_domain>` on GCP — so one provider-neutral GitOps tree serves both.
 - Optional step-ca service can issue short-lived node certs via AWS IID instead of static bootstrap tokens.
 - Observability is managed as code in Terraform (dashboards, logs, access logs, metric filters).
+- Each provider uses separate public origins: `events.<domain>` exposes only
+  the exact webhook path, while `status.<domain>` exposes the authenticated
+  deployment API and same-origin UI. AWS uses a read-only S3 task role and GCP
+  uses a read-only GCS Workload Identity for the status service.
 
-For GCP, the control-plane roles run as GKE Autopilot workloads. Events is exposed through GKE Gateway API using a durable Certificate Manager DNS-authorized certificate and static IP from `terraform/events-edge/gcp`; registry remains a TCP LoadBalancer. Each role has its own Workload Identity and only the Secret Manager CSI mounts it needs. Both planes use private VMs/nodes with Cloud NAT; the x86_64 data plane is a regional managed instance group using nested virtualization, GCS, and a global HTTPS load balancer to Traefik. Terraform state is local in the example stacks. See the GCP guides above for container image, DNS delegation, and TLS prerequisites.
+For GCP, the control-plane roles run as GKE Autopilot workloads. The events
+webhook and authenticated API/UI use distinct hostnames on one GKE Gateway,
+backed by durable Certificate Manager DNS-authorized certificates and a shared
+static IP from `terraform/events-edge/gcp`; registry remains a TCP
+LoadBalancer. Each role has its own Workload Identity and only the Secret
+Manager CSI mounts it needs. Both
+planes use private VMs/nodes with Cloud NAT; the x86_64 data plane is a regional
+managed instance group using nested virtualization, GCS, and a global HTTPS
+load balancer to Traefik. Terraform state is local in the example stacks. See
+the GCP guides above for container image, DNS delegation, and TLS prerequisites.
 
 ## Cleanup
 

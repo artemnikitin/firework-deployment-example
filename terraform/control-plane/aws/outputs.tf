@@ -22,6 +22,16 @@ output "events_webhook_url" {
   value       = local.events_webhook_url
 }
 
+output "api_url" {
+  description = "Authenticated read-only API and same-origin web UI URL"
+  value       = local.api_url
+}
+
+output "status_domain_name" {
+  description = "Public hostname for the authenticated status UI and API"
+  value       = local.effective_status_domain_name
+}
+
 output "events_alb_dns_name" {
   description = "DNS name of the events ALB"
   value       = aws_lb.events.dns_name
@@ -35,6 +45,11 @@ output "events_domain_name" {
 output "events_acm_certificate_arn" {
   description = "ACM certificate ARN used by the events HTTPS listener"
   value       = local.effective_events_acm_certificate_arn
+}
+
+output "status_acm_certificate_arn" {
+  description = "ACM certificate ARN used for the status UI/API hostname"
+  value       = local.effective_status_acm_certificate_arn
 }
 
 output "registry_url" {
@@ -93,6 +108,11 @@ output "controller_service_name" {
   value       = aws_ecs_service.controller.name
 }
 
+output "api_service_name" {
+  description = "ECS service name for read-only API role"
+  value       = aws_ecs_service.api.name
+}
+
 output "events_log_group_name" {
   description = "CloudWatch log group for events service"
   value       = aws_cloudwatch_log_group.events.name
@@ -106,6 +126,11 @@ output "registry_log_group_name" {
 output "controller_log_group_name" {
   description = "CloudWatch log group for controller service"
   value       = aws_cloudwatch_log_group.controller.name
+}
+
+output "api_log_group_name" {
+  description = "CloudWatch log group for read-only API service"
+  value       = aws_cloudwatch_log_group.api.name
 }
 
 output "observability_dashboard_name" {
@@ -128,6 +153,12 @@ output "registry_bootstrap_token_secret_arn" {
 output "github_webhook_secret_secret_arn" {
   description = "Secrets Manager ARN containing the GitHub webhook secret value"
   value       = local.effective_github_webhook_secret_arn
+  sensitive   = true
+}
+
+output "operator_token_secret_arn" {
+  description = "Secrets Manager ARN containing the dedicated operator token; retrieve the value explicitly when configuring fireworkctl"
+  value       = local.effective_operator_token_secret_arn
   sensitive   = true
 }
 

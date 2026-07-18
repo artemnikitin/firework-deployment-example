@@ -5,22 +5,28 @@ This stack provisions Firework control plane on ECS/Fargate with **separated rol
 - `events` service: GitHub webhook ingestion (`/v1/events/github`)
 - `registry` service: node enroll/register/heartbeat APIs (mTLS)
 - `controller` service: leader-elected scheduling/publish loop
+- `api` service: authenticated read-only node/service API and same-origin UI
 - shared S3 bucket for control-plane state and rendered `nodes/*.yaml`
 
 ## Architecture
 
-- `events` runs behind a public HTTPS ALB
+- `events` and `api` share one public HTTPS ALB but use separate origins.
+  `events.<domain>/v1/events/github` routes to events and unmatched events-host
+  requests return 404; `status.<domain>` routes to the API/UI.
 - `registry` runs behind a TCP NLB (set `registry_internal = true` for private-only exposure)
 - `controller` runs as internal ECS tasks with no load balancer
+- `api` has a separate task role restricted to S3 list/get permissions
 - optional `step-ca` runs as a dedicated ECS service with an NLB endpoint and EFS-backed state
 
 ## Prerequisites
 
 - [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.5
-- AWS permissions for VPC, ECS, ELB, IAM, S3, CloudWatch, Secrets Manager (plus ACM/Route53 when auto-creating the events certificate)
-- Either:
-  - existing ACM certificate ARN for events ALB listener (`events_acm_certificate_arn`), or
-  - `events_domain_name` so this stack can auto-create/validate an ACM cert in Route53
+- AWS permissions for VPC, ECS, ELB, IAM, S3, CloudWatch, Secrets Manager (plus ACM/Route53 when auto-creating the events and status certificates)
+- `events_domain_name` for webhook hostname routing and DNS.
+- Optional existing ACM certificate ARN for the events hostname
+  (`events_acm_certificate_arn`); otherwise the stack creates and validates it.
+- `status_domain_name` defaults to `status.<events-domain suffix>`; optionally
+  override it and/or supply `status_acm_certificate_arn`.
 - GHCR image for control plane (`controlplane_image`)
 - Optional: pre-created Secrets Manager ARNs for webhook/TLS/PKI values.
   - If omitted, this stack auto-generates demo secrets when `auto_create_demo_secrets = true` (default).
@@ -35,9 +41,7 @@ This stack provisions Firework control plane on ECS/Fargate with **separated rol
 For a demo deployment, only these are required in `terraform.tfvars`:
 
 - `controlplane_image`
-- one of:
-  - `events_acm_certificate_arn`, or
-  - `events_domain_name` (plus optional `events_hosted_zone_name` override)
+- `events_domain_name` (plus optional `events_hosted_zone_name` override)
 
 Everything else can use defaults and auto-generated secrets.
 
@@ -56,6 +60,10 @@ terraform apply
 ## Important Outputs
 
 - `events_webhook_url` - configure GitHub push webhook to this URL
+- `api_url` - open the UI or configure `fireworkctl`
+- `status_domain_name` - dedicated UI/API hostname
+- `operator_token_secret_arn` - retrieve the operator token explicitly from
+  Secrets Manager; the token value is never a Terraform output
 - `events_domain_name` - custom DNS name for events endpoint (when configured)
 - `generated_github_webhook_secret` - webhook secret value (use this in GitHub when auto-generated)
 - `registry_url` - set in node `agent.yaml` (`registry_url`)
@@ -89,6 +97,24 @@ For node bootstrap in the data-plane stack:
 3. Set **Content type** to `application/json`
 4. Set webhook **Secret** to the same value used in `github_webhook_secret_secret_arn` (or use `generated_github_webhook_secret` output when auto-generated)
 5. Select **Just the push event**
+
+## Access deployment status
+
+The dedicated status HTTPS origin serves the UI and API; the events hostname
+serves only the exact webhook path. Retrieve the operator token into a
+mode-0600 file and keep it out of command arguments:
+
+```bash
+aws secretsmanager get-secret-value \
+  --secret-id "$(terraform output -raw operator_token_secret_arn)" \
+  --query SecretString --output text > operator-token
+chmod 0600 operator-token
+fireworkctl --endpoint "$(terraform output -raw api_url)" \
+  --token-file operator-token nodes
+```
+
+Rotate access by adding a new secret version and forcing a new API ECS
+deployment. The API task cannot write or delete control-plane state.
 
 ## Destroy
 

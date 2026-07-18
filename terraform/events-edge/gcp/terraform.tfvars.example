@@ -2,6 +2,7 @@ gcp_project   = "my-gcp-project"
 gcp_region    = "us-central1"
 dns_zone_name = "firework-gcp"
 events_domain = "events.gcp.example.com"
+status_domain = "status.gcp.example.com"
 
 # Keep this name stable when creating and destroying control planes. The
 # certificate, certificate map, DNS authorization, and IP are intentionally

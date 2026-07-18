@@ -17,6 +17,7 @@ locals {
   effective_registry_tls_key_secret_id   = var.registry_tls_key_secret_id != "" ? var.registry_tls_key_secret_id : (local.auto_generate_tls_material ? google_secret_manager_secret.auto_registry_tls_key[0].secret_id : "")
   effective_enrollment_ca_cert_secret_id = var.enrollment_ca_cert_secret_id != "" ? var.enrollment_ca_cert_secret_id : (local.auto_generate_tls_material ? google_secret_manager_secret.auto_enrollment_ca_cert[0].secret_id : "")
   effective_enrollment_ca_key_secret_id  = var.enrollment_ca_key_secret_id != "" ? var.enrollment_ca_key_secret_id : (local.auto_generate_tls_material ? google_secret_manager_secret.auto_enrollment_ca_key[0].secret_id : "")
+  effective_operator_token_secret_id     = var.operator_token_secret_id != "" ? var.operator_token_secret_id : (local.auto_generate_bootstrap ? google_secret_manager_secret.auto_operator_token[0].secret_id : "")
 }
 
 # --- Enrollment CA (root of trust for all generated certs) ---
@@ -106,6 +107,12 @@ resource "tls_locally_signed_cert" "auto_registry_tls" {
 resource "random_password" "auto_bootstrap_token" {
   count   = local.auto_generate_bootstrap ? 1 : 0
   length  = 40
+  special = false
+}
+
+resource "random_password" "auto_operator_token" {
+  count   = local.auto_generate_bootstrap ? 1 : 0
+  length  = 48
   special = false
 }
 
@@ -214,4 +221,19 @@ resource "google_secret_manager_secret_version" "auto_bootstrap_token" {
   count       = local.auto_generate_bootstrap ? 1 : 0
   secret      = google_secret_manager_secret.auto_bootstrap_token[0].id
   secret_data = random_password.auto_bootstrap_token[0].result
+}
+
+resource "google_secret_manager_secret" "auto_operator_token" {
+  count     = local.auto_generate_bootstrap ? 1 : 0
+  secret_id = "${local.name_prefix}-operator-token"
+  replication {
+    auto {}
+  }
+  depends_on = [google_project_service.required]
+}
+
+resource "google_secret_manager_secret_version" "auto_operator_token" {
+  count       = local.auto_generate_bootstrap ? 1 : 0
+  secret      = google_secret_manager_secret.auto_operator_token[0].id
+  secret_data = random_password.auto_operator_token[0].result
 }

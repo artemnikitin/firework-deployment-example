@@ -94,6 +94,12 @@ variable "controller_tick" {
   default     = "10s"
 }
 
+variable "node_stale_ttl" {
+  description = "Freshness threshold used by the controller and visibility API."
+  type        = string
+  default     = "45s"
+}
+
 variable "events_listen_addr" {
   description = "Listen address for the events role inside the container."
   type        = string
@@ -104,6 +110,12 @@ variable "registry_listen_addr" {
   description = "Listen address for the registry role inside the container."
   type        = string
   default     = ":9443"
+}
+
+variable "api_listen_addr" {
+  description = "Listen address for the read-only API role inside the container."
+  type        = string
+  default     = ":9445"
 }
 
 variable "events_listener_port" {
@@ -138,6 +150,24 @@ variable "events_domain_name" {
 
 variable "events_hosted_zone_name" {
   description = "Optional Route53 hosted zone name used for events_domain_name DNS records (for example example.com). If empty, Terraform derives it by stripping the first label from events_domain_name."
+  type        = string
+  default     = ""
+}
+
+variable "status_acm_certificate_arn" {
+  description = "Optional ACM certificate ARN covering the status UI/API hostname. If empty, a certificate is created for the effective status domain."
+  type        = string
+  default     = ""
+}
+
+variable "status_domain_name" {
+  description = "Optional FQDN for the status UI/API (for example status.example.com). If empty, Terraform replaces the first label of events_domain_name with status."
+  type        = string
+  default     = ""
+}
+
+variable "status_hosted_zone_name" {
+  description = "Optional Route53 hosted zone name used for status_domain_name DNS records. If empty, Terraform derives it by stripping the first label from the effective status domain."
   type        = string
   default     = ""
 }
@@ -189,6 +219,12 @@ variable "controller_desired_count" {
   default     = 2
 }
 
+variable "api_desired_count" {
+  description = "Desired task count for the read-only API ECS service."
+  type        = number
+  default     = 2
+}
+
 variable "events_task_cpu" {
   description = "CPU units for events tasks."
   type        = number
@@ -225,8 +261,27 @@ variable "controller_task_memory" {
   default     = 512
 }
 
+variable "api_task_cpu" {
+  description = "CPU units for read-only API tasks."
+  type        = number
+  default     = 256
+}
+
+variable "api_task_memory" {
+  description = "Memory (MiB) for read-only API tasks."
+  type        = number
+  default     = 512
+}
+
 variable "github_webhook_secret_secret_arn" {
   description = "Optional Secrets Manager ARN containing the GitHub webhook secret value. If empty and auto_create_demo_secrets=true, one is generated."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "operator_token_secret_arn" {
+  description = "Optional Secrets Manager ARN containing the dedicated read-only operator token. If empty and auto_create_demo_secrets=true, one is generated."
   type        = string
   sensitive   = true
   default     = ""
@@ -476,4 +531,10 @@ variable "registry_task_port" {
   description = "Container port exposed by registry role."
   type        = number
   default     = 9443
+}
+
+variable "api_task_port" {
+  description = "Container port exposed by the read-only API role."
+  type        = number
+  default     = 9445
 }
