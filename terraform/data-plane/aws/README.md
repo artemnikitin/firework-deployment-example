@@ -221,8 +221,38 @@ Remaining constraints:
 - The remote service must have at least one `port_forwards` entry so the host-side port
   is known.
 
+## Persistent storage
+
+Both storage backends are disabled by default:
+
+- `enable_local_storage=true` attaches a separate encrypted gp3 disk with
+  `delete_on_termination=false`. Startup formats only a blank device, mounts it
+  by UUID at `/var/lib/firework/volumes`, and renders the configured logical
+  admission budget. Startup tags the disk with `FireworkNodeID=<instance-id>`
+  for recovery. ASG replacement leaves the old disk detached and the old
+  node binding pending; it is never auto-attached to a replacement instance.
+- `enable_shared_storage=true` creates encrypted Regional EFS, one mount target
+  per private subnet, a node-only NFS security group, and an optional access
+  point. Nodes mount it with TLS before the agent starts and verify a stable
+  backend marker. Shared application placement remains safety-gated in
+  Firework until durable per-VM fencing is available.
+
+Application quota changes resize only the retained ext4 image. Expand the gp3
+disk or adjust the EFS admission budget separately before retrying a quota
+growth. Back up data before any shrink.
+
+Local disks and EFS are intentionally retained. Find detached local disks with
+`aws ec2 describe-volumes --filters Name=status,Values=available Name=tag:Retention,Values=manual`.
+EFS has Terraform `prevent_destroy`; for deliberate stack teardown, first
+destroy its access point/mount targets/security group, remove the EFS resource
+from Terraform state so it remains retained, then destroy the rest. Delete the
+file system manually only after a backup and explicit data-retention decision.
+
 ## Destroy
 
 ```bash
 terraform destroy
 ```
+
+With persistent storage enabled, follow the retention procedure above instead
+of expecting a one-command destructive teardown.

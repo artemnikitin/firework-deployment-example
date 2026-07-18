@@ -9,6 +9,7 @@ This document covers building the Firework node AMI in `packer/aws/`.
 - Firecracker-compatible `vmlinux-5.10.x` kernel
 - `firework-agent` binary
 - `amazon-ssm-agent` enabled
+- `e2fsprogs` and `amazon-efs-utils` for local ext4 pools and TLS EFS mounts
 - systemd unit and required directories
 
 ## Prerequisites

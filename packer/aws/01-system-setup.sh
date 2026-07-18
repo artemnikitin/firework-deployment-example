@@ -18,6 +18,9 @@ sudo dnf install -y --allowerasing \
   iptables \
   iproute \
   procps-ng \
+  e2fsprogs \
+  util-linux \
+  amazon-efs-utils \
   amazon-ssm-agent
 
 # Ensure SSM agent is enabled/running in the baked AMI.

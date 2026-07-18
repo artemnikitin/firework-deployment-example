@@ -50,6 +50,31 @@ terraform apply
 Certificate Manager issuance commonly takes 15–60 minutes after DNS
 authorization propagates. Nodes have no external IP; use IAP for SSH.
 
+## Persistent storage
+
+Storage remains disabled unless explicitly enabled:
+
+- `enable_local_storage=true` adds a stateful Hyperdisk Balanced disk named
+  `firework-volumes` to each instance. The regional MIG uses `delete_rule =
+  "NEVER"`, preserves instance names with `RECREATE`, disables proactive zone
+  redistribution, and uses an unavailable (non-surge) rollout. Startup formats
+  only a blank disk and mounts it by UUID at `/var/lib/firework/volumes`.
+- `enable_shared_storage=true` enables the Filestore API and creates a Regional
+  NFSv4.1 share on the node VPC. Nodes mount it before the agent starts and
+  verify the configured backend identity marker. The default 1 TiB capacity is
+  a material cost; confirm tier/region minimums before applying. Shared
+  application placement remains safety-gated until Firework's durable fencing
+  work is complete.
+
+Application quota resize affects only `volume.ext4`, not Hyperdisk or
+Filestore capacity. Grow the provider backend separately and back up before
+shrinking an application quota.
+
+Stateful disks use `NEVER` and can remain after MIG deletion. Find orphaned
+disks with `gcloud compute disks list --filter='users:* = false'` and delete
+only after confirming the Firework logical binding and backups. Filestore
+deletion protection defaults to true; disable it only for deliberate teardown.
+
 ## Routing domain
 
 `base_domain` (for example `gcp.example.com`) is the single source of truth for

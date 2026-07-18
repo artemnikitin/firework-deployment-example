@@ -34,6 +34,13 @@ CW_FIRECRACKER_LOG_GROUP="${cw_firecracker_log_group}"
 CW_METRIC_NAMESPACE="${cw_metric_namespace}"
 TRAEFIK_CONFIG_DIR="${traefik_config_dir}"
 INGRESS_DOMAIN="${ingress_domain}"
+LOCAL_STORAGE_ENABLED="${enable_local_storage}"
+LOCAL_STORAGE_CAPACITY="${local_storage_capacity}"
+SHARED_STORAGE_ENABLED="${enable_shared_storage}"
+SHARED_STORAGE_BACKEND_ID="${shared_storage_backend_id}"
+SHARED_STORAGE_CAPACITY="${shared_storage_capacity}"
+EFS_FILE_SYSTEM_ID="${efs_file_system_id}"
+EFS_ACCESS_POINT_ID="${efs_access_point_id}"
 REGISTRY_CA_FILE="/etc/firework/pki/node-ca.crt"
 REGISTRY_CERT_FILE="/etc/firework/pki/node.crt"
 REGISTRY_KEY_FILE="/etc/firework/pki/node.key"
@@ -48,6 +55,94 @@ TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
 INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
   "http://169.254.169.254/latest/meta-data/instance-id")
 echo "==> Instance ID: $INSTANCE_ID"
+
+# --- 0.0 Prepare operator-provided persistent storage pools ---
+if [ "$LOCAL_STORAGE_ENABLED" = "true" ]; then
+  LOCAL_STORAGE_DEVICE=""
+  for _attempt in $(seq 1 30); do
+    for _device in /dev/nvme*n1 /dev/xvdf /dev/sdf; do
+      [ -b "$_device" ] || continue
+      if command -v ebsnvme-id >/dev/null 2>&1; then
+        _mapping=$(ebsnvme-id -u "$_device" 2>/dev/null || true)
+        if [ "$_mapping" = "/dev/sdf" ]; then
+          LOCAL_STORAGE_DEVICE="$_device"
+          break
+        fi
+      elif [ "$_device" = "/dev/xvdf" ] || [ "$_device" = "/dev/sdf" ]; then
+        LOCAL_STORAGE_DEVICE="$_device"
+        break
+      fi
+    done
+    [ -n "$LOCAL_STORAGE_DEVICE" ] && break
+    sleep 2
+  done
+  if [ -z "$LOCAL_STORAGE_DEVICE" ]; then
+    echo "ERROR: retained local storage device /dev/sdf was not found"
+    exit 1
+  fi
+
+  LOCAL_STORAGE_VOLUME_ID=$(aws ec2 describe-volumes \
+    --region "$REGION" \
+    --filters "Name=attachment.instance-id,Values=$INSTANCE_ID" "Name=attachment.device,Values=/dev/sdf" \
+    --query 'Volumes[0].VolumeId' --output text)
+  if [ -z "$LOCAL_STORAGE_VOLUME_ID" ] || [ "$LOCAL_STORAGE_VOLUME_ID" = "None" ]; then
+    echo "ERROR: retained local storage volume ID was not found"
+    exit 1
+  fi
+  aws ec2 create-tags --region "$REGION" --resources "$LOCAL_STORAGE_VOLUME_ID" \
+    --tags "Key=FireworkNodeID,Value=$INSTANCE_ID"
+
+  _filesystem=$(blkid -o value -s TYPE "$LOCAL_STORAGE_DEVICE" 2>/dev/null || true)
+  if [ -z "$_filesystem" ]; then
+    if wipefs -n "$LOCAL_STORAGE_DEVICE" | grep -q .; then
+      echo "ERROR: local storage device has an unexpected filesystem signature"
+      exit 1
+    fi
+    mkfs.ext4 -F -m 0 -L firework-volumes "$LOCAL_STORAGE_DEVICE"
+  elif [ "$_filesystem" != "ext4" ]; then
+    echo "ERROR: local storage device filesystem is $_filesystem, expected ext4"
+    exit 1
+  fi
+
+  LOCAL_STORAGE_UUID=$(blkid -o value -s UUID "$LOCAL_STORAGE_DEVICE")
+  install -d -m 0750 /var/lib/firework/volumes
+  grep -q "UUID=$LOCAL_STORAGE_UUID " /etc/fstab || \
+    echo "UUID=$LOCAL_STORAGE_UUID /var/lib/firework/volumes ext4 defaults,nofail,x-systemd.device-timeout=2min 0 2" >> /etc/fstab
+  mountpoint -q /var/lib/firework/volumes || mount /var/lib/firework/volumes
+fi
+
+if [ "$SHARED_STORAGE_ENABLED" = "true" ]; then
+  install -d -m 0750 /mnt/firework-shared
+  EFS_OPTIONS="_netdev,tls,nofail,x-systemd.automount"
+  if [ -n "$EFS_ACCESS_POINT_ID" ]; then
+    EFS_OPTIONS="$EFS_OPTIONS,accesspoint=$EFS_ACCESS_POINT_ID"
+  fi
+  grep -q "^$EFS_FILE_SYSTEM_ID:/ /mnt/firework-shared " /etc/fstab || \
+    echo "$EFS_FILE_SYSTEM_ID:/ /mnt/firework-shared efs $EFS_OPTIONS 0 0" >> /etc/fstab
+  for _attempt in $(seq 1 30); do
+    mountpoint -q /mnt/firework-shared || mount /mnt/firework-shared || true
+    mountpoint -q /mnt/firework-shared && break
+    sleep 5
+  done
+  if ! mountpoint -q /mnt/firework-shared; then
+    echo "ERROR: EFS did not mount at /mnt/firework-shared"
+    exit 1
+  fi
+  _marker=/mnt/firework-shared/.firework-backend-id
+  if [ -e "$_marker" ] && [ "$(tr -d '\r\n' < "$_marker")" != "$SHARED_STORAGE_BACKEND_ID" ]; then
+    echo "ERROR: shared backend identity marker does not match"
+    exit 1
+  fi
+  if [ ! -e "$_marker" ]; then
+    printf '%s\n' "$SHARED_STORAGE_BACKEND_ID" > "$_marker.tmp.$INSTANCE_ID"
+    mv -n "$_marker.tmp.$INSTANCE_ID" "$_marker" || true
+    rm -f "$_marker.tmp.$INSTANCE_ID"
+  fi
+  if [ "$(tr -d '\r\n' < "$_marker")" != "$SHARED_STORAGE_BACKEND_ID" ]; then
+    echo "ERROR: shared backend identity marker changed concurrently"
+    exit 1
+  fi
+fi
 
 # Disable source/dest check so the host can route east-west VM traffic across
 # nodes. This cannot be set in the launch template (provider limitation), so
@@ -86,6 +181,23 @@ StandardOutput=append:/var/log/firework-agent.log
 StandardError=append:/var/log/firework-agent.log
 EOF
 systemctl daemon-reload
+
+if [ "$LOCAL_STORAGE_ENABLED" = "true" ] || [ "$SHARED_STORAGE_ENABLED" = "true" ]; then
+  cat >/etc/systemd/system/firework-agent.service.d/20-storage.conf <<'EOF'
+[Unit]
+RequiresMountsFor=/var/lib/firework/volumes /mnt/firework-shared
+After=remote-fs.target local-fs.target
+EOF
+  # Remove disabled paths so RequiresMountsFor does not create accidental
+  # dependencies on directories that are intentionally unused.
+  if [ "$LOCAL_STORAGE_ENABLED" != "true" ]; then
+    sed -i 's# /var/lib/firework/volumes##' /etc/systemd/system/firework-agent.service.d/20-storage.conf
+  fi
+  if [ "$SHARED_STORAGE_ENABLED" != "true" ]; then
+    sed -i 's# /mnt/firework-shared##' /etc/systemd/system/firework-agent.service.d/20-storage.conf
+  fi
+  systemctl daemon-reload
+fi
 
 # --- 0.4 Write Prometheus scrape config for the firework-agent metrics endpoint ---
 # The CW agent will scrape this and publish firework_node_* metrics to CloudWatch
@@ -284,6 +396,29 @@ out_interface: "$PRIMARY_IF"
 traefik_config_dir: "$TRAEFIK_CONFIG_DIR"
 ingress_domain: "$INGRESS_DOMAIN"
 AGENTCFG
+
+if [ "$LOCAL_STORAGE_ENABLED" = "true" ] || [ "$SHARED_STORAGE_ENABLED" = "true" ]; then
+  cat >> /etc/firework/agent.yaml <<'STORAGEHEADER'
+storage:
+STORAGEHEADER
+  if [ "$LOCAL_STORAGE_ENABLED" = "true" ]; then
+    cat >> /etc/firework/agent.yaml <<LOCALSTORAGECFG
+  local:
+    path: "/var/lib/firework/volumes"
+    capacity: "$LOCAL_STORAGE_CAPACITY"
+LOCALSTORAGECFG
+  fi
+  if [ "$SHARED_STORAGE_ENABLED" = "true" ]; then
+    cat >> /etc/firework/agent.yaml <<SHAREDSTORAGECFG
+  shared:
+    backend_id: "$SHARED_STORAGE_BACKEND_ID"
+    path: "/mnt/firework-shared"
+SHAREDSTORAGECFG
+    if [ -n "$SHARED_STORAGE_CAPACITY" ]; then
+      printf '    capacity: "%s"\n' "$SHARED_STORAGE_CAPACITY" >> /etc/firework/agent.yaml
+    fi
+  fi
+fi
 
 if [ -n "$REGISTRY_URL" ]; then
   cat >> /etc/firework/agent.yaml <<REGISTRYCFG

@@ -6,6 +6,7 @@ Cloud DNS; Certificate Manager; GKE clusters; service accounts; logging
 metrics; and monitoring resources. Typical predefined roles are:
 
 - `roles/compute.admin`
+- `roles/file.editor` — provision and resize the optional Filestore backend; node service accounts do not need this role for NFS data access
 - `roles/container.admin` — create and manage GKE Autopilot clusters (GCP control-plane)
 - `roles/storage.admin`
 - `roles/secretmanager.admin`
@@ -43,6 +44,7 @@ PRINCIPAL="user:you@example.com"   # or serviceAccount:NAME@PROJECT_ID.iam.gserv
 
 for role in \
   roles/compute.admin \
+  roles/file.editor \
   roles/container.admin \
   roles/storage.admin \
   roles/secretmanager.admin \

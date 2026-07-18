@@ -32,6 +32,19 @@ resource "aws_launch_template" "node" {
     }
   }
 
+  dynamic "block_device_mappings" {
+    for_each = var.enable_local_storage ? [1] : []
+    content {
+      device_name = "/dev/sdf"
+      ebs {
+        volume_size           = var.local_storage_size_gib
+        volume_type           = "gp3"
+        delete_on_termination = false
+        encrypted             = true
+      }
+    }
+  }
+
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
@@ -60,12 +73,27 @@ resource "aws_launch_template" "node" {
     cw_prometheus_log_group             = aws_cloudwatch_log_group.node_prometheus.name
     traefik_config_dir                  = "/etc/traefik/dynamic"
     ingress_domain                      = trimsuffix(var.domain_name, ".")
+    enable_local_storage                = var.enable_local_storage
+    local_storage_capacity              = var.local_storage_capacity
+    enable_shared_storage               = var.enable_shared_storage
+    shared_storage_backend_id           = var.shared_storage_backend_id
+    shared_storage_capacity             = var.shared_storage_capacity
+    efs_file_system_id                  = var.enable_shared_storage ? aws_efs_file_system.shared[0].id : ""
+    efs_access_point_id                 = var.enable_shared_storage && var.shared_storage_use_access_point ? aws_efs_access_point.shared[0].id : ""
   }))
 
   tag_specifications {
     resource_type = "instance"
     tags = {
       Name = "${var.project_name}-node"
+    }
+  }
+
+  tag_specifications {
+    resource_type = "volume"
+    tags = {
+      Name      = "${var.project_name}-node-volume"
+      Retention = "manual"
     }
   }
 
@@ -107,5 +135,7 @@ resource "aws_autoscaling_group" "nodes" {
   lifecycle {
     create_before_destroy = true
   }
+
+  depends_on = [aws_efs_mount_target.shared]
 
 }

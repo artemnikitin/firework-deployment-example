@@ -68,6 +68,19 @@ node_instance_type = "c6g.metal"
 # Number of Firecracker nodes.
 node_count = 2
 
+# Persistent storage is disabled by default. Enable either block independently.
+# Local volumes use a retained encrypted gp3 disk per node.
+# enable_local_storage   = true
+# local_storage_size_gib = 500
+# local_storage_capacity = "450Gi"
+
+# Shared volumes use encrypted regional EFS mounted on every node. The
+# Firework shared runtime remains pending until its fencing safety gate lands.
+# enable_shared_storage          = true
+# shared_storage_backend_id      = "primary"
+# shared_storage_capacity        = "1Ti" # optional admission/cost budget
+# shared_storage_use_access_point = true
+
 # Guest networking (defaults match the agent's built-in defaults).
 # vm_subnet  = "172.16.0.0/24"
 # vm_gateway = "172.16.0.1"
