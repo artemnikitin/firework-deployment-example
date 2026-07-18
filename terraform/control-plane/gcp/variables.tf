@@ -19,6 +19,12 @@ variable "events_domain" {
   description = "Public events webhook hostname"
 }
 
+variable "status_domain" {
+  type        = string
+  default     = ""
+  description = "Public status UI/API hostname. Auto-filled from durable Events edge state when empty."
+}
+
 variable "use_events_edge_remote_state" {
   type        = bool
   default     = true
@@ -76,7 +82,13 @@ variable "network_cidr" {
 
 variable "controlplane_image" {
   type        = string
-  description = "Container image for firework-controlplane, e.g. ghcr.io/artemnikitin/firework-controlplane:v1.2.3"
+  description = "OCI image URL for firework-controlplane (for example ghcr.io/org/firework-controlplane:tag)."
+}
+
+variable "controlplane_deployment_revision" {
+  type        = string
+  default     = ""
+  description = "Opaque revision changed to roll all GKE control-plane Deployments when controlplane_image uses a mutable tag. Set this to the published image digest."
 }
 
 variable "git_repo_url" {
@@ -148,6 +160,17 @@ variable "registry_port" {
   }
 }
 
+variable "api_port" {
+  type        = number
+  default     = 9445
+  description = "HTTPS port for the read-only API role and its GKE Service backend."
+
+  validation {
+    condition     = var.api_port > 0 && var.api_port < 65536
+    error_message = "api_port must be a valid TCP port."
+  }
+}
+
 variable "registry_node_cert_ttl" {
   type        = string
   default     = "24h"
@@ -170,6 +193,12 @@ variable "controller_replicas" {
   type        = number
   default     = 1
   description = "Number of replicas for the controller Deployment."
+}
+
+variable "api_replicas" {
+  type        = number
+  default     = 1
+  description = "Number of replicas for the read-only API Deployment."
 }
 
 variable "reconcile_on_start" {
@@ -199,6 +228,7 @@ variable "auto_create_demo_secrets" {
       var.registry_tls_key_secret_id == "",
       var.enrollment_ca_cert_secret_id == "",
       var.enrollment_ca_key_secret_id == "",
+      var.operator_token_secret_id == "",
       ]) : alltrue([
       var.bootstrap_token_secret_id != "",
       var.events_tls_cert_secret_id != "",
@@ -207,8 +237,9 @@ variable "auto_create_demo_secrets" {
       var.registry_tls_key_secret_id != "",
       var.enrollment_ca_cert_secret_id != "",
       var.enrollment_ca_key_secret_id != "",
+      var.operator_token_secret_id != "",
     ])
-    error_message = "Use either fully auto-generated TLS/PKI material or provide every TLS, enrollment CA, and bootstrap-token secret ID; partial overrides are unsupported."
+    error_message = "Use either fully auto-generated TLS/PKI/operator material or provide every TLS, enrollment CA, bootstrap-token, and operator-token secret ID; partial overrides are unsupported."
   }
 }
 
@@ -273,6 +304,12 @@ variable "github_token_secret_id" {
   type        = string
   default     = ""
   description = "Optional Secret Manager secret ID containing a GitHub token for private GitOps repos. When set, GITHUB_TOKEN is injected into the events pod."
+}
+
+variable "operator_token_secret_id" {
+  type        = string
+  default     = ""
+  description = "Secret Manager secret ID for the dedicated read-only operator token. Auto-generated in demo mode."
 }
 
 # --- Network exposure ---

@@ -75,18 +75,70 @@ resource "aws_lb_listener" "events_https" {
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
 
   default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.events.arn
+    type = "fixed-response"
+
+    fixed_response {
+      content_type = "text/plain"
+      message_body = "not found"
+      status_code  = "404"
+    }
   }
 
   lifecycle {
     precondition {
-      condition     = local.effective_events_acm_certificate_arn != ""
-      error_message = "Events HTTPS listener requires an ACM cert. Set events_acm_certificate_arn or set events_domain_name for auto-generated ACM."
+      condition     = local.effective_events_acm_certificate_arn != "" && local.effective_status_acm_certificate_arn != ""
+      error_message = "The HTTPS listener requires certificates for both the events and status hostnames."
     }
   }
 
   depends_on = [terraform_data.validate_events_tls]
+}
+
+resource "aws_lb_listener_certificate" "status" {
+  # Resource counts must be known during planning. Compare input ARNs rather
+  # than effective ARNs, which can depend on certificates created this apply.
+  count = local.status_certificate_is_listener_default ? 0 : 1
+
+  listener_arn    = aws_lb_listener.events_https.arn
+  certificate_arn = local.effective_status_acm_certificate_arn
+}
+
+resource "aws_lb_listener_rule" "events_webhook" {
+  listener_arn = aws_lb_listener.events_https.arn
+  priority     = 10
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.events.arn
+  }
+
+  condition {
+    host_header {
+      values = [trimsuffix(var.events_domain_name, ".")]
+    }
+  }
+
+  condition {
+    path_pattern {
+      values = ["/v1/events/github"]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "status" {
+  listener_arn = aws_lb_listener.events_https.arn
+  priority     = 20
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
+  }
+
+  condition {
+    host_header {
+      values = [local.effective_status_domain_name]
+    }
+  }
 }
 
 resource "aws_lb" "registry" {
@@ -152,6 +204,7 @@ locals {
         'leader_lease_ttl: "${var.leader_lease_ttl}"' \
         'leader_renew_interval: "${var.leader_renew_interval}"' \
         'controller_tick: "${var.controller_tick}"' \
+        'node_stale_ttl: "${var.node_stale_ttl}"' \
         'target_branch: "${var.target_branch}"' \
         'config_dir: "${var.config_dir}"' \
         'git_repo_url: "${var.git_repo_url}"' \
@@ -195,6 +248,7 @@ locals {
         'leader_lease_ttl: "${var.leader_lease_ttl}"' \
         'leader_renew_interval: "${var.leader_renew_interval}"' \
         'controller_tick: "${var.controller_tick}"' \
+        'node_stale_ttl: "${var.node_stale_ttl}"' \
         'target_branch: "${var.target_branch}"' \
         'config_dir: "${var.config_dir}"' \
         'git_repo_url: "${var.git_repo_url}"' \
@@ -243,6 +297,7 @@ locals {
         'leader_lease_ttl: "${var.leader_lease_ttl}"' \
         'leader_renew_interval: "${var.leader_renew_interval}"' \
         'controller_tick: "${var.controller_tick}"' \
+        'node_stale_ttl: "${var.node_stale_ttl}"' \
         'target_branch: "${var.target_branch}"' \
         'config_dir: "${var.config_dir}"' \
         'git_repo_url: "${var.git_repo_url}"' \
@@ -461,11 +516,16 @@ resource "aws_ecs_task_definition" "controller" {
 }
 
 resource "aws_ecs_service" "events" {
-  name            = "${var.project_name}-controlplane-events"
-  cluster         = aws_ecs_cluster.controlplane.id
-  task_definition = aws_ecs_task_definition.events.arn
-  desired_count   = var.events_desired_count
-  launch_type     = "FARGATE"
+  name                 = "${var.project_name}-controlplane-events"
+  cluster              = aws_ecs_cluster.controlplane.id
+  task_definition      = aws_ecs_task_definition.events.arn
+  desired_count        = var.events_desired_count
+  launch_type          = "FARGATE"
+  force_new_deployment = true
+
+  triggers = {
+    controlplane_deployment_revision = var.controlplane_deployment_revision
+  }
 
   network_configuration {
     subnets          = [for subnet in aws_subnet.public : subnet.id]
@@ -484,17 +544,22 @@ resource "aws_ecs_service" "events" {
     rollback = true
   }
 
-  depends_on = [aws_lb_listener.events_https]
+  depends_on = [aws_lb_listener_rule.events_webhook]
 
   tags = { Name = "${var.project_name}-controlplane-events-svc" }
 }
 
 resource "aws_ecs_service" "registry" {
-  name            = "${var.project_name}-controlplane-registry"
-  cluster         = aws_ecs_cluster.controlplane.id
-  task_definition = aws_ecs_task_definition.registry.arn
-  desired_count   = var.registry_desired_count
-  launch_type     = "FARGATE"
+  name                 = "${var.project_name}-controlplane-registry"
+  cluster              = aws_ecs_cluster.controlplane.id
+  task_definition      = aws_ecs_task_definition.registry.arn
+  desired_count        = var.registry_desired_count
+  launch_type          = "FARGATE"
+  force_new_deployment = true
+
+  triggers = {
+    controlplane_deployment_revision = var.controlplane_deployment_revision
+  }
 
   network_configuration {
     subnets          = [for subnet in aws_subnet.public : subnet.id]
@@ -519,11 +584,16 @@ resource "aws_ecs_service" "registry" {
 }
 
 resource "aws_ecs_service" "controller" {
-  name            = "${var.project_name}-controlplane-controller"
-  cluster         = aws_ecs_cluster.controlplane.id
-  task_definition = aws_ecs_task_definition.controller.arn
-  desired_count   = var.controller_desired_count
-  launch_type     = "FARGATE"
+  name                 = "${var.project_name}-controlplane-controller"
+  cluster              = aws_ecs_cluster.controlplane.id
+  task_definition      = aws_ecs_task_definition.controller.arn
+  desired_count        = var.controller_desired_count
+  launch_type          = "FARGATE"
+  force_new_deployment = true
+
+  triggers = {
+    controlplane_deployment_revision = var.controlplane_deployment_revision
+  }
 
   network_configuration {
     subnets          = [for subnet in aws_subnet.public : subnet.id]
@@ -556,7 +626,8 @@ resource "aws_cloudwatch_dashboard" "controlplane" {
           metrics = [
             ["AWS/ECS", "RunningTaskCount", "ClusterName", aws_ecs_cluster.controlplane.name, "ServiceName", aws_ecs_service.events.name, { stat = "Average", label = "events running" }],
             ["AWS/ECS", "RunningTaskCount", "ClusterName", aws_ecs_cluster.controlplane.name, "ServiceName", aws_ecs_service.registry.name, { stat = "Average", label = "registry running" }],
-            ["AWS/ECS", "RunningTaskCount", "ClusterName", aws_ecs_cluster.controlplane.name, "ServiceName", aws_ecs_service.controller.name, { stat = "Average", label = "controller running" }]
+            ["AWS/ECS", "RunningTaskCount", "ClusterName", aws_ecs_cluster.controlplane.name, "ServiceName", aws_ecs_service.controller.name, { stat = "Average", label = "controller running" }],
+            ["AWS/ECS", "RunningTaskCount", "ClusterName", aws_ecs_cluster.controlplane.name, "ServiceName", aws_ecs_service.api.name, { stat = "Average", label = "api running" }]
           ]
         }
       },

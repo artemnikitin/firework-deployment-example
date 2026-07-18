@@ -122,6 +122,27 @@ resource "aws_secretsmanager_secret_version" "auto_github_webhook" {
   secret_string = random_password.auto_github_webhook[0].result
 }
 
+resource "random_password" "auto_operator_token" {
+  count = var.auto_create_demo_secrets && var.operator_token_secret_arn == "" ? 1 : 0
+
+  length  = 48
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "auto_operator_token" {
+  count = var.auto_create_demo_secrets && var.operator_token_secret_arn == "" ? 1 : 0
+
+  name_prefix = "${var.project_name}-operator-token-"
+  description = "Auto-generated read-only operator API token for ${var.project_name} control-plane"
+}
+
+resource "aws_secretsmanager_secret_version" "auto_operator_token" {
+  count = var.auto_create_demo_secrets && var.operator_token_secret_arn == "" ? 1 : 0
+
+  secret_id     = aws_secretsmanager_secret.auto_operator_token[0].id
+  secret_string = random_password.auto_operator_token[0].result
+}
+
 resource "aws_secretsmanager_secret" "auto_events_tls_cert" {
   count = var.auto_create_demo_secrets && var.events_tls_cert_secret_arn == "" ? 1 : 0
 

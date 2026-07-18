@@ -84,3 +84,35 @@ resource "aws_iam_role_policy" "task_s3_state" {
   role        = aws_iam_role.task.id
   policy      = data.aws_iam_policy_document.task_s3_state.json
 }
+
+# The visibility API is enforced read-only both in code and IAM. It can list
+# and read the configured state prefix but cannot publish or delete objects.
+resource "aws_iam_role" "api_task" {
+  name_prefix        = "${var.project_name}-cp-api-"
+  assume_role_policy = data.aws_iam_policy_document.ecs_task_assume.json
+
+  tags = { Name = "${var.project_name}-cp-api-task-role" }
+}
+
+data "aws_iam_policy_document" "api_s3_state" {
+  statement {
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.configs.arn]
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = [local.iam_state_prefix_pattern]
+    }
+  }
+
+  statement {
+    actions   = ["s3:GetObject"]
+    resources = [local.iam_state_object_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "api_s3_state" {
+  name_prefix = "s3-state-read-"
+  role        = aws_iam_role.api_task.id
+  policy      = data.aws_iam_policy_document.api_s3_state.json
+}

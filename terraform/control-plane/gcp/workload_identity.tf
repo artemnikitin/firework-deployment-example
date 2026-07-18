@@ -26,6 +26,15 @@ locals {
       account_id = "${local.name_prefix}-controller-sa"
       secret_ids = toset([])
     }
+    api = {
+      ksa_name   = "firework-api"
+      account_id = "${local.name_prefix}-api-sa"
+      secret_ids = toset([
+        local.effective_events_tls_cert_secret_id,
+        local.effective_events_tls_key_secret_id,
+        local.effective_operator_token_secret_id,
+      ])
+    }
   }
 
   controlplane_secret_accessors = merge([
@@ -54,10 +63,16 @@ resource "google_service_account_iam_member" "workload_identity" {
 }
 
 resource "google_storage_bucket_iam_member" "state_object_admin" {
-  for_each = google_service_account.controlplane
+  for_each = { for role, account in google_service_account.controlplane : role => account if role != "api" }
   bucket   = google_storage_bucket.state.name
   role     = "roles/storage.objectAdmin"
   member   = "serviceAccount:${each.value.email}"
+}
+
+resource "google_storage_bucket_iam_member" "state_object_viewer" {
+  bucket = google_storage_bucket.state.name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.controlplane["api"].email}"
 }
 
 resource "google_project_iam_member" "logging_writer" {

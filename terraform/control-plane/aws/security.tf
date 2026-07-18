@@ -89,3 +89,27 @@ resource "aws_security_group" "controller_tasks" {
 
   tags = { Name = "${var.project_name}-controller-tasks-sg" }
 }
+
+resource "aws_security_group" "api_tasks" {
+  name_prefix = "${var.project_name}-api-tasks-"
+  description = "Read-only API ECS tasks"
+  vpc_id      = aws_vpc.controlplane.id
+
+  ingress {
+    description     = "HTTPS from shared control-plane ALB"
+    from_port       = var.api_task_port
+    to_port         = var.api_task_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.events_lb.id]
+  }
+
+  egress {
+    description = "Allow all outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { Name = "${var.project_name}-api-tasks-sg" }
+}

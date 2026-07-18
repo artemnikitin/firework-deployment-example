@@ -21,6 +21,8 @@ locals {
   effective_events_gateway_address_name = var.events_gateway_address_name != "" ? var.events_gateway_address_name : try(local.events_edge_outputs.events_gateway_address_name, "")
   effective_events_certificate_map_name = var.events_certificate_map_name != "" ? var.events_certificate_map_name : try(local.events_edge_outputs.events_certificate_map_name, "")
   events_edge_domain                    = try(local.events_edge_outputs.events_domain, "")
+  status_edge_domain                    = try(local.events_edge_outputs.status_domain, "")
+  effective_status_domain               = var.status_domain != "" ? trimsuffix(var.status_domain, ".") : local.status_edge_domain
 }
 
 resource "terraform_data" "validate_events_edge_wiring" {
@@ -46,6 +48,21 @@ resource "terraform_data" "validate_events_edge_wiring" {
     precondition {
       condition     = !local.events_edge_state_found || local.events_edge_domain == trimsuffix(var.events_domain, ".")
       error_message = "events_domain must match the durable Events edge state. Apply the matching edge stack or correct events_domain."
+    }
+
+    precondition {
+      condition     = local.effective_status_domain != ""
+      error_message = "status_domain is required (set explicitly or auto-wire it from an updated durable Events edge state)."
+    }
+
+    precondition {
+      condition     = trimsuffix(var.events_domain, ".") != local.effective_status_domain
+      error_message = "events_domain and status_domain must be different hostnames."
+    }
+
+    precondition {
+      condition     = !local.events_edge_state_found || var.status_domain == "" || local.status_edge_domain == trimsuffix(var.status_domain, ".")
+      error_message = "status_domain must match the durable Events edge state. Apply the matching edge stack or correct status_domain."
     }
   }
 }

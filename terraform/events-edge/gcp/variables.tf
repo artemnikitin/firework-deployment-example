@@ -25,6 +25,21 @@ variable "events_domain" {
   }
 }
 
+variable "status_domain" {
+  type        = string
+  description = "Public status UI/API hostname protected by the durable Certificate Manager certificate map."
+
+  validation {
+    condition     = can(regex("^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$", trimsuffix(var.status_domain, ".")))
+    error_message = "status_domain must be a lowercase multi-label DNS hostname without a scheme, port, path, wildcard, or trailing dot."
+  }
+
+  validation {
+    condition     = trimsuffix(var.status_domain, ".") != trimsuffix(var.events_domain, ".")
+    error_message = "status_domain must be different from events_domain."
+  }
+}
+
 variable "edge_name" {
   type        = string
   description = "Stable resource-name prefix for the durable Events edge. Do not derive this from a disposable control-plane deployment name."
