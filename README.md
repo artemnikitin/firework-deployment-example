@@ -67,6 +67,7 @@ flowchart LR
 
 - AWS: [Packer](packer/aws/README.md), [control plane](terraform/control-plane/aws/README.md), [data plane](terraform/data-plane/aws/README.md)
 - GCP: [Packer](packer/gcp/README.md), [control plane](terraform/control-plane/gcp/README.md), [data plane](terraform/data-plane/gcp/README.md)
+- Deployment status UI and CLI access: [deployment-status.md](docs/deployment-status.md)
 
 ## Key Notes
 
