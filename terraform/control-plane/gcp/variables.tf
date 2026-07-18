@@ -82,7 +82,13 @@ variable "network_cidr" {
 
 variable "controlplane_image" {
   type        = string
-  description = "Container image for firework-controlplane, e.g. ghcr.io/artemnikitin/firework-controlplane:v1.2.3"
+  description = "OCI image URL for firework-controlplane (for example ghcr.io/org/firework-controlplane:tag)."
+}
+
+variable "controlplane_deployment_revision" {
+  type        = string
+  default     = ""
+  description = "Opaque revision changed to roll all GKE control-plane Deployments when controlplane_image uses a mutable tag. Set this to the published image digest."
 }
 
 variable "git_repo_url" {

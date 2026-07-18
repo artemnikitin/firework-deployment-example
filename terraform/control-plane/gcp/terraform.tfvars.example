@@ -14,7 +14,10 @@ events_domain      = "events.gcp.example.com"
 # the auto-generated registry TLS cert will use a DNS SAN for registry.<base_domain>.
 # base_domain = "gcp.example.com"
 state_bucket_name  = "firework-cp-state-my-gcp-project"
-controlplane_image = "ghcr.io/artemnikitin/firework-controlplane:v1.2.3"
+controlplane_image = "ghcr.io/artemnikitin/firework-controlplane:dev"
+# When reusing a mutable image tag, update this to the newly published digest
+# so Terraform rolls all four GKE control-plane Deployments.
+controlplane_deployment_revision = "sha256:008bc64899293f064518513e83ede46a53117e84c5410f942a9e8163a5b63c9f"
 git_repo_url       = "https://github.com/OWNER/firework-gitops-example.git"
 target_branch      = "main"
 # events_port   = 9444

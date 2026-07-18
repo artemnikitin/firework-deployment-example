@@ -87,11 +87,27 @@ To bring your own certs instead, set `auto_create_demo_secrets = false` and supp
 
 ### 5. Container image
 
-The control-plane runs from a container image. Set `var.controlplane_image` to a published image:
+Configure the image and rollout revision separately, matching the AWS stack.
+`controlplane_image` may use a mutable tag such as `dev`.
+`controlplane_deployment_revision` is an opaque rollout trigger and should be
+set to the published image digest.
 
+Inspect the desired tag and copy the top-level multi-platform `Digest` value:
+
+```bash
+docker buildx imagetools inspect ghcr.io/artemnikitin/firework-controlplane:dev
 ```
-controlplane_image = "ghcr.io/artemnikitin/firework-controlplane:v0.1.0"
+
+Then set both values in `terraform.tfvars`:
+
+```hcl
+controlplane_image               = "ghcr.io/artemnikitin/firework-controlplane:dev"
+controlplane_deployment_revision = "sha256:008bc64899293f064518513e83ede46a53117e84c5410f942a9e8163a5b63c9f"
 ```
+
+Changing `controlplane_deployment_revision` updates an annotation on every
+control-plane pod template. A normal `terraform apply` then rolls all four
+roles, and `image_pull_policy = "Always"` pulls the current image for the tag.
 
 ---
 

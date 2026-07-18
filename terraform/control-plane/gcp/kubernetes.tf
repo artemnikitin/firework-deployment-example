@@ -316,6 +316,9 @@ resource "kubernetes_deployment" "events" {
     template {
       metadata {
         labels = merge(local.common_labels, { role = "events" })
+        annotations = {
+          "firework.artemnikitin.com/controlplane-deployment-revision" = var.controlplane_deployment_revision
+        }
       }
       spec {
         service_account_name = kubernetes_service_account.controlplane["events"].metadata[0].name
@@ -394,6 +397,17 @@ resource "kubernetes_deployment" "events" {
     google_storage_bucket_iam_member.state_object_admin,
     google_service_account_iam_member.workload_identity,
   ]
+
+  lifecycle {
+    ignore_changes = [
+      metadata[0].annotations["autopilot.gke.io/resource-adjustment"],
+      metadata[0].annotations["autopilot.gke.io/warden-version"],
+      spec[0].template[0].spec[0].container[0].resources[0].requests["ephemeral-storage"],
+      spec[0].template[0].spec[0].container[0].security_context,
+      spec[0].template[0].spec[0].security_context,
+      spec[0].template[0].spec[0].toleration,
+    ]
+  }
 }
 
 resource "kubernetes_deployment" "registry" {
@@ -410,6 +424,9 @@ resource "kubernetes_deployment" "registry" {
     template {
       metadata {
         labels = merge(local.common_labels, { role = "registry" })
+        annotations = {
+          "firework.artemnikitin.com/controlplane-deployment-revision" = var.controlplane_deployment_revision
+        }
       }
       spec {
         service_account_name = kubernetes_service_account.controlplane["registry"].metadata[0].name
@@ -472,6 +489,17 @@ resource "kubernetes_deployment" "registry" {
     google_storage_bucket_iam_member.state_object_admin,
     google_service_account_iam_member.workload_identity,
   ]
+
+  lifecycle {
+    ignore_changes = [
+      metadata[0].annotations["autopilot.gke.io/resource-adjustment"],
+      metadata[0].annotations["autopilot.gke.io/warden-version"],
+      spec[0].template[0].spec[0].container[0].resources[0].requests["ephemeral-storage"],
+      spec[0].template[0].spec[0].container[0].security_context,
+      spec[0].template[0].spec[0].security_context,
+      spec[0].template[0].spec[0].toleration,
+    ]
+  }
 }
 
 resource "kubernetes_deployment" "controller" {
@@ -488,6 +516,9 @@ resource "kubernetes_deployment" "controller" {
     template {
       metadata {
         labels = merge(local.common_labels, { role = "controller" })
+        annotations = {
+          "firework.artemnikitin.com/controlplane-deployment-revision" = var.controlplane_deployment_revision
+        }
       }
       spec {
         service_account_name = kubernetes_service_account.controlplane["controller"].metadata[0].name
@@ -528,6 +559,17 @@ resource "kubernetes_deployment" "controller" {
     google_storage_bucket_iam_member.state_object_admin,
     google_service_account_iam_member.workload_identity,
   ]
+
+  lifecycle {
+    ignore_changes = [
+      metadata[0].annotations["autopilot.gke.io/resource-adjustment"],
+      metadata[0].annotations["autopilot.gke.io/warden-version"],
+      spec[0].template[0].spec[0].container[0].resources[0].requests["ephemeral-storage"],
+      spec[0].template[0].spec[0].container[0].security_context,
+      spec[0].template[0].spec[0].security_context,
+      spec[0].template[0].spec[0].toleration,
+    ]
+  }
 }
 
 resource "kubernetes_deployment" "api" {
@@ -544,6 +586,9 @@ resource "kubernetes_deployment" "api" {
     template {
       metadata {
         labels = merge(local.common_labels, { role = "api" })
+        annotations = {
+          "firework.artemnikitin.com/controlplane-deployment-revision" = var.controlplane_deployment_revision
+        }
       }
       spec {
         service_account_name = kubernetes_service_account.controlplane["api"].metadata[0].name
@@ -617,6 +662,17 @@ resource "kubernetes_deployment" "api" {
     google_storage_bucket_iam_member.state_object_viewer,
     google_service_account_iam_member.workload_identity,
   ]
+
+  lifecycle {
+    ignore_changes = [
+      metadata[0].annotations["autopilot.gke.io/resource-adjustment"],
+      metadata[0].annotations["autopilot.gke.io/warden-version"],
+      spec[0].template[0].spec[0].container[0].resources[0].requests["ephemeral-storage"],
+      spec[0].template[0].spec[0].container[0].security_context,
+      spec[0].template[0].spec[0].security_context,
+      spec[0].template[0].spec[0].toleration,
+    ]
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -641,6 +697,13 @@ resource "kubernetes_service" "events" {
       app_protocol = "HTTPS"
     }
   }
+
+  lifecycle {
+    ignore_changes = [
+      metadata[0].annotations["cloud.google.com/neg"],
+      metadata[0].annotations["cloud.google.com/neg-status"],
+    ]
+  }
 }
 
 resource "kubernetes_service" "api" {
@@ -660,6 +723,13 @@ resource "kubernetes_service" "api" {
       protocol     = "TCP"
       app_protocol = "HTTPS"
     }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      metadata[0].annotations["cloud.google.com/neg"],
+      metadata[0].annotations["cloud.google.com/neg-status"],
+    ]
   }
 }
 
@@ -882,5 +952,11 @@ resource "kubernetes_service" "registry" {
       target_port = var.registry_port
       protocol    = "TCP"
     }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      metadata[0].annotations["networking.gke.io/target-pool"],
+    ]
   }
 }
