@@ -95,7 +95,9 @@ resource "aws_lb_listener" "events_https" {
 }
 
 resource "aws_lb_listener_certificate" "status" {
-  count = local.effective_status_acm_certificate_arn != local.effective_events_acm_certificate_arn ? 1 : 0
+  # Resource counts must be known during planning. Compare input ARNs rather
+  # than effective ARNs, which can depend on certificates created this apply.
+  count = local.status_certificate_is_listener_default ? 0 : 1
 
   listener_arn    = aws_lb_listener.events_https.arn
   certificate_arn = local.effective_status_acm_certificate_arn
