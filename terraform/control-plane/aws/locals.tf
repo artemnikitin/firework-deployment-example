@@ -28,7 +28,11 @@ locals {
     var.events_domain_name != "" ? replace(trimsuffix(var.events_domain_name, "."), "/^[^.]+\\./", "status.") : ""
   )
   effective_status_acm_certificate_arn = var.status_acm_certificate_arn != "" ? var.status_acm_certificate_arn : try(aws_acm_certificate_validation.status[0].certificate_arn, "")
-  events_webhook_host                  = trimsuffix(var.events_domain_name, ".")
+  status_certificate_is_listener_default = (
+    var.status_acm_certificate_arn != "" &&
+    var.status_acm_certificate_arn == var.events_acm_certificate_arn
+  )
+  events_webhook_host = trimsuffix(var.events_domain_name, ".")
 
   registry_enrollment_enabled      = local.effective_registry_enrollment_ca_secret_arn != "" && local.effective_registry_enrollment_ca_key_secret_arn != ""
   registry_bootstrap_token_enabled = local.effective_registry_bootstrap_token_secret_arn != ""
