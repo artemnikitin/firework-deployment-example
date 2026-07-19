@@ -178,7 +178,9 @@ history, write it to a mode-0600 file, and point the CLI at that file:
 ```bash
 gcloud secrets versions access latest \
   --secret="$(terraform output -raw operator_token_secret_id)" > operator-token
+
 chmod 0600 operator-token
+
 fireworkctl --endpoint "$(terraform output -raw api_url)" \
   --token-file operator-token nodes
 ```
