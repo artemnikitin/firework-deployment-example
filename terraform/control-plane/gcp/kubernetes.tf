@@ -79,6 +79,7 @@ locals {
   api_config = yamlencode({
     role            = "api"
     api_listen_addr = ":${var.api_port}"
+    ingress_domain  = var.service_ingress_domain
     state = {
       backend = "gcs"
       prefix  = var.state_prefix

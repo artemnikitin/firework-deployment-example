@@ -8,6 +8,11 @@ The control plane has two public origins:
 The operator token is stored in the provider's secret manager. Terraform outputs
 the secret identifier, not the token value.
 
+Set `service_ingress_domain` in each control-plane stack to the matching
+data-plane `domain_name` (AWS) or `base_domain` (GCP). The API then exposes a
+clickable HTTPS URL for services with `metadata.subdomain`; exact
+`metadata.host` routes are linked without this suffix.
+
 ## AWS
 
 Run these commands from `terraform/control-plane/aws` after the stack is
