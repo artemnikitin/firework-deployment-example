@@ -38,7 +38,9 @@ user-data additionally waits for the regional EC2 endpoint before doing
 metadata or storage setup. It then retries AWS API, S3, Secrets Manager,
 package, and step-ca calls with bounded exponential backoff. This keeps a
 transient network timeout from making cloud-init's one-shot bootstrap fail
-permanently.
+permanently. The launch template gzip-compresses user-data before base64
+encoding so the complete bootstrap remains within EC2's 16 KiB raw-payload
+limit; Amazon Linux cloud-init expands it before execution.
 
 ## Minimal Input (quick start)
 
@@ -251,18 +253,36 @@ Application quota changes resize only the retained ext4 image. Expand the gp3
 disk or adjust the EFS admission budget separately before retrying a quota
 growth. Back up data before any shrink.
 
-Local disks and EFS are intentionally retained. Find detached local disks with
-`aws ec2 describe-volumes --filters Name=status,Values=available Name=tag:Retention,Values=manual`.
-EFS has Terraform `prevent_destroy`; for deliberate stack teardown, first
-destroy its access point/mount targets/security group, remove the EFS resource
-from Terraform state so it remains retained, then destroy the rest. Delete the
-file system manually only after a backup and explicit data-retention decision.
+Local disks and EFS are intentionally retained. Inspect detached local disks
+without changing them:
+
+```bash
+./scripts/cleanup-orphaned-aws-volumes.sh \
+  --region us-east-1 \
+  --project-name firework-demo
+```
+
+For a deliberate data-plane teardown that also permanently deletes matching
+unattached local disks only after `terraform destroy` succeeds, run this from
+the repository root:
+
+```bash
+./scripts/destroy-aws-data-plane.sh \
+  --region us-east-1 \
+  --project-name firework-demo \
+  -- -auto-approve
+```
+
+The cleanup scripts are deliberately dry-run by default; the destroy wrapper
+passes their explicit `--delete` flag only after a successful destroy. EFS is
+not included in this cleanup. EFS has Terraform `prevent_destroy`; for
+deliberate stack teardown, first destroy its access point/mount targets/security
+group, remove the EFS resource from Terraform state so it remains retained,
+then destroy the rest. Delete the file system manually only after a backup and
+explicit data-retention decision.
 
 ## Destroy
 
-```bash
-terraform destroy
-```
-
-With persistent storage enabled, follow the retention procedure above instead
-of expecting a one-command destructive teardown.
+Use the wrapper above when local persistent storage should be deleted with the
+data plane. Use `terraform destroy` directly when retained disks must be
+preserved.

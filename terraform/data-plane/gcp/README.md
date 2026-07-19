@@ -70,9 +70,29 @@ Application quota resize affects only `volume.ext4`, not Hyperdisk or
 Filestore capacity. Grow the provider backend separately and back up before
 shrinking an application quota.
 
-Stateful disks use `NEVER` and can remain after MIG deletion. Find orphaned
-disks with `gcloud compute disks list --filter='users:* = false'` and delete
-only after confirming the Firework logical binding and backups. Filestore
+Stateful disks use `NEVER` and can remain after MIG deletion. Inspect matching
+unattached Firework `pd-balanced` or `hyperdisk-balanced` local-storage disks
+without changing them:
+
+```bash
+./scripts/cleanup-orphaned-gcp-volumes.sh \
+  --project example-project \
+  --deployment-name firework
+```
+
+For a deliberate data-plane teardown that also permanently deletes matching
+unattached local disks only after `terraform destroy` succeeds, run this from
+the repository root:
+
+```bash
+./scripts/destroy-gcp-data-plane.sh \
+  --project example-project \
+  --deployment-name firework \
+  -- -auto-approve
+```
+
+The cleanup scripts are deliberately dry-run by default; the destroy wrapper
+passes their explicit `--delete` flag only after a successful destroy. Filestore
 deletion protection defaults to true; disable it only for deliberate teardown.
 
 ## Routing domain

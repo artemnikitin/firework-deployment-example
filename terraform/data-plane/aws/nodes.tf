@@ -51,7 +51,10 @@ resource "aws_launch_template" "node" {
     http_put_response_hop_limit = 2
   }
 
-  user_data = base64encode(templatefile("${path.module}/templates/user-data.sh.tpl", {
+  # EC2 limits the raw user-data payload to 16 KiB. The bootstrap script is
+  # intentionally larger because it retries transient network/bootstrap work.
+  # Amazon Linux cloud-init transparently expands gzip-compressed user data.
+  user_data = base64gzip(templatefile("${path.module}/templates/user-data.sh.tpl", {
     s3_configs_bucket                   = local.effective_s3_configs_bucket_id
     s3_configs_prefix                   = local.effective_s3_configs_prefix
     s3_images_bucket                    = var.s3_images_bucket_id
