@@ -30,6 +30,16 @@ This stack depends on:
 
 Apply order is strict: deploy `terraform/control-plane/aws` first, then `terraform/data-plane/aws`.
 
+### Node bootstrap network readiness
+
+Instances can start while NAT gateways and private-subnet routes are still
+converging. The ASG waits for private route-table associations, and node
+user-data additionally waits for the regional EC2 endpoint before doing
+metadata or storage setup. It then retries AWS API, S3, Secrets Manager,
+package, and step-ca calls with bounded exponential backoff. This keeps a
+transient network timeout from making cloud-init's one-shot bootstrap fail
+permanently.
+
 ## Minimal Input (quick start)
 
 With control-plane auto-wiring enabled, the minimum required `terraform.tfvars` values are:

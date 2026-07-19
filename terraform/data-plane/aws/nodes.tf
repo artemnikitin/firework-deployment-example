@@ -136,6 +136,13 @@ resource "aws_autoscaling_group" "nodes" {
     create_before_destroy = true
   }
 
-  depends_on = [aws_efs_mount_target.shared]
+  # Do not launch private instances until their NAT-backed route tables are
+  # associated. User-data still retries because route/NAT readiness can be
+  # transient, but this prevents the normal apply path from racing the NAT
+  # gateway provisioning entirely.
+  depends_on = [
+    aws_efs_mount_target.shared,
+    aws_route_table_association.private,
+  ]
 
 }

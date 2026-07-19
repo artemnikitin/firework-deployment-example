@@ -49,11 +49,62 @@ STEP_BIN=""
 
 mkdir -p "$IMAGES_DIR" /var/log
 
+# Cloud-init runs as soon as the instance's primary interface is configured,
+# but the subnet's NAT gateway and route may still be converging. Treat every
+# cloud/network call as retryable so one early timeout cannot permanently abort
+# this one-shot bootstrap under `set -euo pipefail`.
+retry() {
+  local _label="$1"
+  local _attempts="$2"
+  local _delay="$3"
+  shift 3
+
+  local _attempt
+  for ((_attempt = 1; _attempt <= _attempts; _attempt++)); do
+    if "$@"; then
+      return 0
+    fi
+    if [ "$_attempt" -eq "$_attempts" ]; then
+      break
+    fi
+    echo "==> $_label attempt $_attempt failed; retrying in $${_delay}s..." >&2
+    sleep "$_delay"
+    if [ "$_delay" -lt 30 ]; then
+      _delay=$((_delay * 2))
+      [ "$_delay" -gt 30 ] && _delay=30
+    fi
+  done
+  echo "ERROR: $_label failed after $_attempts attempts" >&2
+  return 1
+}
+
+wait_for_aws_network() {
+  # Any HTTP response proves DNS, routing, NAT/VPC endpoint, and TLS are
+  # usable. Do not use --fail: the endpoint may legitimately return 4xx.
+  curl -sS --connect-timeout 5 --max-time 10 -o /dev/null \
+    "https://ec2.$${S3_REGION}.amazonaws.com"
+}
+
+# 20 attempts with capped exponential backoff sleep for about 8.5 minutes
+# (plus probe time), covering NAT gateway provisioning and route propagation
+# without relying on a cloud-init retry that does not exist for scripts-user.
+retry "AWS network readiness" 20 5 wait_for_aws_network
+
 # --- 0. Get instance ID from IMDS (IMDSv2 required) ---
-TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
-  -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
-INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
-  "http://169.254.169.254/latest/meta-data/instance-id")
+get_imds_token() {
+  curl -sS --fail --connect-timeout 2 --max-time 5 -X PUT \
+    "http://169.254.169.254/latest/api/token" \
+    -H "X-aws-ec2-metadata-token-ttl-seconds: 60"
+}
+
+get_instance_id() {
+  curl -sS --fail --connect-timeout 2 --max-time 5 \
+    -H "X-aws-ec2-metadata-token: $TOKEN" \
+    "http://169.254.169.254/latest/meta-data/instance-id"
+}
+
+TOKEN=$(retry "IMDSv2 token" 10 2 get_imds_token)
+INSTANCE_ID=$(retry "instance ID metadata" 10 2 get_instance_id)
 echo "==> Instance ID: $INSTANCE_ID"
 
 # --- 0.0 Prepare operator-provided persistent storage pools ---
@@ -85,16 +136,23 @@ if [ "$LOCAL_STORAGE_ENABLED" = "true" ]; then
     exit 1
   fi
 
-  LOCAL_STORAGE_VOLUME_ID=$(aws ec2 describe-volumes \
-    --region "$S3_REGION" \
-    --filters "Name=attachment.instance-id,Values=$INSTANCE_ID" "Name=attachment.device,Values=/dev/sdf" \
-    --query 'Volumes[0].VolumeId' --output text)
-  if [ -z "$LOCAL_STORAGE_VOLUME_ID" ] || [ "$LOCAL_STORAGE_VOLUME_ID" = "None" ]; then
-    echo "ERROR: retained local storage volume ID was not found"
-    exit 1
-  fi
-  aws ec2 create-tags --region "$S3_REGION" --resources "$LOCAL_STORAGE_VOLUME_ID" \
-    --tags "Key=FireworkNodeID,Value=$INSTANCE_ID"
+  find_local_storage_volume() {
+    local _volume_id
+    _volume_id=$(aws ec2 describe-volumes \
+      --region "$S3_REGION" \
+      --filters "Name=attachment.instance-id,Values=$INSTANCE_ID" "Name=attachment.device,Values=/dev/sdf" \
+      --query 'Volumes[0].VolumeId' --output text 2>/dev/null || true)
+    if [ -n "$_volume_id" ] && [ "$_volume_id" != "None" ]; then
+      printf '%s\n' "$_volume_id"
+      return 0
+    fi
+    return 1
+  }
+
+  LOCAL_STORAGE_VOLUME_ID=$(retry "find retained local storage volume" 20 5 find_local_storage_volume)
+  retry "tag retained local storage volume" 20 5 \
+    aws ec2 create-tags --region "$S3_REGION" --resources "$LOCAL_STORAGE_VOLUME_ID" \
+      --tags "Key=FireworkNodeID,Value=$INSTANCE_ID"
 
   _filesystem=$(blkid -o value -s TYPE "$LOCAL_STORAGE_DEVICE" 2>/dev/null || true)
   if [ -z "$_filesystem" ]; then
@@ -151,15 +209,11 @@ fi
 # Disable source/dest check so the host can route east-west VM traffic across
 # nodes. This cannot be set in the launch template (provider limitation), so
 # we apply it here via the instance's own IAM role.
-# Retry up to 3 times to handle transient credential/API hiccups at boot.
-for _attempt in 1 2 3; do
+retry "disable source/dest check" 20 5 \
   aws ec2 modify-instance-attribute \
     --instance-id "$INSTANCE_ID" \
     --no-source-dest-check \
-    --region "$S3_REGION" && break
-  echo "==> source/dest check attempt $_attempt failed, retrying in $${_attempt}0s..."
-  sleep $((_attempt * 10))
-done
+    --region "$S3_REGION"
 echo "==> Source/dest check disabled"
 
 # --- 0.1 Ensure SSM agent is available/running (for private-node access) ---
@@ -284,8 +338,8 @@ gpgcheck=1
 gpgkey=https://packages.smallstep.com/keys/smallstep-0x889B19391F774443.gpg
 EOF
 
-  dnf makecache -y
-  dnf install -y step-cli
+  retry "refresh package metadata for step CLI" 10 5 dnf makecache -y
+  retry "install step CLI" 10 5 dnf install -y step-cli
   STEP_BIN="$(command -v step)"
   if [ -z "$STEP_BIN" ]; then
     echo "ERROR: step CLI install failed"
@@ -295,9 +349,10 @@ EOF
 
 # --- 1. Download rootfs images from S3 ---
 echo "==> Downloading rootfs images from s3://$S3_IMAGES_BUCKET/"
-aws s3 sync "s3://$S3_IMAGES_BUCKET/" "$IMAGES_DIR/" \
-  --region "$S3_REGION" \
-  --exclude "*" --include "*.ext4"
+retry "download rootfs images" 20 5 \
+  aws s3 sync "s3://$S3_IMAGES_BUCKET/" "$IMAGES_DIR/" \
+    --region "$S3_REGION" \
+    --exclude "*" --include "*.ext4"
 echo "==> Images downloaded"
 
 # --- 2. Write agent config ---
@@ -320,11 +375,12 @@ if [ -n "$REGISTRY_URL" ]; then
     exit 1
   fi
 
-  aws secretsmanager get-secret-value \
-    --secret-id "$REGISTRY_CA_SECRET_ARN" \
-    --region "$S3_REGION" \
-    --query SecretString \
-    --output text > "$REGISTRY_CA_FILE"
+  retry "download registry CA secret" 20 5 \
+    aws secretsmanager get-secret-value \
+      --secret-id "$REGISTRY_CA_SECRET_ARN" \
+      --region "$S3_REGION" \
+      --query SecretString \
+      --output text > "$REGISTRY_CA_FILE"
   chmod 0644 "$REGISTRY_CA_FILE"
 
   if [ -n "$STEP_CA_URL" ]; then
@@ -332,19 +388,21 @@ if [ -n "$REGISTRY_URL" ]; then
     install_step_cli
 
     STEP_CA_ROOT_FINGERPRINT=$("$STEP_BIN" certificate fingerprint "$REGISTRY_CA_FILE")
-    "$STEP_BIN" ca bootstrap \
-      --ca-url "$STEP_CA_URL" \
-      --fingerprint "$STEP_CA_ROOT_FINGERPRINT" \
-      --install \
-      --force
+    retry "bootstrap step-ca client" 10 5 \
+      "$STEP_BIN" ca bootstrap \
+        --ca-url "$STEP_CA_URL" \
+        --fingerprint "$STEP_CA_ROOT_FINGERPRINT" \
+        --install \
+        --force
 
     STEP_NODE_SUBJECT="$INSTANCE_ID$STEP_CA_SUBJECT_SUFFIX"
-    "$STEP_BIN" ca certificate "$STEP_NODE_SUBJECT" \
-      "$REGISTRY_CERT_FILE" "$REGISTRY_KEY_FILE" \
-      --provisioner "$STEP_CA_PROVISIONER" \
-      --ca-url "$STEP_CA_URL" \
-      --root "$REGISTRY_CA_FILE" \
-      --force
+    retry "issue node certificate" 10 5 \
+      "$STEP_BIN" ca certificate "$STEP_NODE_SUBJECT" \
+        "$REGISTRY_CERT_FILE" "$REGISTRY_KEY_FILE" \
+        --provisioner "$STEP_CA_PROVISIONER" \
+        --ca-url "$STEP_CA_URL" \
+        --root "$REGISTRY_CA_FILE" \
+        --force
     chmod 0600 "$REGISTRY_KEY_FILE"
 
     cat >/etc/systemd/system/firework-step-renew.service <<EOF
@@ -365,11 +423,12 @@ EOF
     systemctl daemon-reload
     systemctl enable --now firework-step-renew.service
   elif [ -n "$REGISTRY_BOOTSTRAP_TOKEN_SECRET_ARN" ]; then
-    REGISTRY_BOOTSTRAP_TOKEN=$(aws secretsmanager get-secret-value \
-      --secret-id "$REGISTRY_BOOTSTRAP_TOKEN_SECRET_ARN" \
-      --region "$S3_REGION" \
-      --query SecretString \
-      --output text)
+    REGISTRY_BOOTSTRAP_TOKEN=$(retry "download registry bootstrap token" 20 5 \
+      aws secretsmanager get-secret-value \
+        --secret-id "$REGISTRY_BOOTSTRAP_TOKEN_SECRET_ARN" \
+        --region "$S3_REGION" \
+        --query SecretString \
+        --output text)
   else
     echo "ERROR: registry_url is set but neither step_ca_url nor registry_bootstrap_token_secret_arn is configured"
     exit 1
