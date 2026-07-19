@@ -2,6 +2,16 @@ output "gcs_images_bucket_name" {
   value = var.images_bucket_name
 }
 
+output "configs_bucket_name" {
+  value       = local.effective_config_bucket_name
+  description = "GCS bucket containing rendered configs and retained volume records"
+}
+
+output "configs_bucket_prefix" {
+  value       = local.effective_config_prefix
+  description = "Prefix inside the configs bucket where nodes read rendered configs"
+}
+
 output "tenant_load_balancer_ip" {
   value = google_compute_global_address.tenant.address
 }

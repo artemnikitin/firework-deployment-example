@@ -77,12 +77,14 @@ without changing them:
 ```bash
 ./scripts/cleanup-orphaned-gcp-volumes.sh \
   --project example-project \
-  --deployment-name firework
+  --deployment-name firework \
+  --config-bucket firework-control-plane-state \
+  --config-prefix cp/v1/
 ```
 
-For a deliberate data-plane teardown that also permanently deletes matching
-unattached local disks only after `terraform destroy` succeeds, run this from
-the repository root:
+For a deliberate clean data-plane teardown that also permanently deletes
+matching unattached local disks and retained local-volume records bound to
+instances that no longer exist, run this from the repository root:
 
 ```bash
 ./scripts/destroy-gcp-data-plane.sh \
@@ -91,9 +93,14 @@ the repository root:
   -- -auto-approve
 ```
 
-The cleanup scripts are deliberately dry-run by default; the destroy wrapper
-passes their explicit `--delete` flag only after a successful destroy. Filestore
-deletion protection defaults to true; disable it only for deliberate teardown.
+The cleanup scripts are deliberately dry-run by default. The destroy wrapper
+captures the config bucket and prefix before Terraform removes the data-plane
+outputs, then passes the explicit `--delete` flag only after a successful
+destroy. Bindings to existing Compute Engine instances are never selected.
+This keeps a later fresh provision from inheriting a binding to a deleted MIG
+instance without weakening Firework's fail-closed behavior for ordinary node
+loss. Filestore deletion protection defaults to true; disable it only for
+deliberate teardown.
 
 ## Routing domain
 

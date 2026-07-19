@@ -34,6 +34,11 @@ output "configs_bucket_prefix" {
   value       = local.effective_s3_configs_prefix
 }
 
+output "configs_bucket_name" {
+  description = "S3 bucket containing rendered configs and retained volume records"
+  value       = local.effective_s3_configs_bucket_id
+}
+
 output "registry_url" {
   description = "Resolved control-plane registry URL used by nodes"
   value       = local.effective_registry_url

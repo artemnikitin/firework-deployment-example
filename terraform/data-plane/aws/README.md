@@ -259,12 +259,14 @@ without changing them:
 ```bash
 ./scripts/cleanup-orphaned-aws-volumes.sh \
   --region us-east-1 \
-  --project-name firework-demo
+  --project-name firework-demo \
+  --config-bucket firework-demo-configs-example \
+  --config-prefix cp/v1/
 ```
 
-For a deliberate data-plane teardown that also permanently deletes matching
-unattached local disks only after `terraform destroy` succeeds, run this from
-the repository root:
+For a deliberate clean data-plane teardown that also permanently deletes
+matching unattached local disks and retained local-volume records bound to
+instances that no longer exist, run this from the repository root:
 
 ```bash
 ./scripts/destroy-aws-data-plane.sh \
@@ -273,9 +275,13 @@ the repository root:
   -- -auto-approve
 ```
 
-The cleanup scripts are deliberately dry-run by default; the destroy wrapper
-passes their explicit `--delete` flag only after a successful destroy. EFS is
-not included in this cleanup. EFS has Terraform `prevent_destroy`; for
+The cleanup scripts are deliberately dry-run by default. The destroy wrapper
+captures the config bucket and prefix before Terraform removes the data-plane
+outputs, then passes the explicit `--delete` flag only after a successful
+destroy. Active or stopped EC2 bindings are never selected. This keeps a later
+fresh provision from inheriting a binding to a deleted instance without
+weakening Firework's fail-closed behavior for ordinary node loss. EFS is not
+included in this cleanup. EFS has Terraform `prevent_destroy`; for
 deliberate stack teardown, first destroy its access point/mount targets/security
 group, remove the EFS resource from Terraform state so it remains retained,
 then destroy the rest. Delete the file system manually only after a backup and
@@ -283,6 +289,6 @@ explicit data-retention decision.
 
 ## Destroy
 
-Use the wrapper above when local persistent storage should be deleted with the
-data plane. Use `terraform destroy` directly when retained disks must be
-preserved.
+Use the wrapper above when local persistent storage and its logical bindings
+should be deleted with the data plane. Use `terraform destroy` directly when
+retained disks and bindings must be preserved for explicit recovery.

@@ -4,18 +4,22 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  cleanup-orphaned-gcp-volumes.sh --project <gcp-project> --deployment-name <name> [--delete]
+  cleanup-orphaned-gcp-volumes.sh --project <gcp-project> --deployment-name <name> [--config-bucket <gcs-bucket>] [--config-prefix <prefix>] [--delete]
 
 Lists unattached Firework local-storage disks created by the regional managed
 instance group. The current instance-template contract names those data disks
 <deployment-name>-node-<instance-suffix>-1; boot disks do not match this
-suffix. Without --delete it is a dry run. --delete permanently removes each
-listed disk. Restore any required application data from backups first.
+suffix. When --config-bucket is supplied, the script also matches retained
+local-volume records whose bound Compute Engine instance no longer exists.
+Without --delete it is a dry run. --delete permanently removes each listed disk
+and record. Restore any required application data from backups first.
 EOF
 }
 
 project=""
 deployment_name=""
+config_bucket=""
+config_prefix="cp/v1/"
 delete=false
 
 while (($#)); do
@@ -26,6 +30,14 @@ while (($#)); do
       ;;
     --deployment-name)
       deployment_name="${2:-}"
+      shift 2
+      ;;
+    --config-bucket)
+      config_bucket="${2:-}"
+      shift 2
+      ;;
+    --config-prefix)
+      config_prefix="${2:-}"
       shift 2
       ;;
     --delete)
@@ -68,20 +80,32 @@ candidates=$(gcloud compute disks list --project "$project" --format=json | jq -
 
 if [[ -z "$candidates" ]]; then
   echo "No unattached retained Firework disks found for deployment $deployment_name in project $project."
-  exit 0
+else
+  printf '%s\n' "Matched unattached retained Firework disks:"
+  printf 'NAME\tZONE\tSIZE_GIB\tTYPE\tCREATED\n'
+  printf '%s\n' "$candidates"
+
+  if [[ "$delete" == true ]]; then
+    while IFS=$'\t' read -r name zone _size _type _created; do
+      [[ -z "$name" || -z "$zone" ]] && continue
+      echo "Deleting $name in $zone"
+      gcloud compute disks delete "$name" --zone "$zone" --project "$project" --quiet
+    done <<< "$candidates"
+  else
+    echo "Dry run only. Re-run with --delete to permanently remove these disks."
+  fi
 fi
 
-printf '%s\n' "Matched unattached retained Firework disks:"
-printf 'NAME\tZONE\tSIZE_GIB\tTYPE\tCREATED\n'
-printf '%s\n' "$candidates"
-
-if [[ "$delete" != true ]]; then
-  echo "Dry run only. Re-run with --delete to permanently remove these disks."
-  exit 0
+if [[ -n "$config_bucket" ]]; then
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+  record_args=(
+    --provider gcp
+    --bucket "$config_bucket"
+    --prefix "$config_prefix"
+    --project "$project"
+  )
+  if [[ "$delete" == true ]]; then
+    record_args+=(--delete)
+  fi
+  "$script_dir/cleanup-orphaned-volume-records.sh" "${record_args[@]}"
 fi
-
-while IFS=$'\t' read -r name zone _size _type _created; do
-  [[ -z "$name" || -z "$zone" ]] && continue
-  echo "Deleting $name in $zone"
-  gcloud compute disks delete "$name" --zone "$zone" --project "$project" --quiet
-done <<< "$candidates"

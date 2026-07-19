@@ -7,7 +7,8 @@ Usage:
   destroy-aws-data-plane.sh --region <aws-region> --project-name <name> [--profile <profile>] [-- <terraform destroy args>]
 
 Runs the AWS data-plane Terraform destroy. Only after it succeeds, permanently
-deletes matching unattached retained Firework local-storage volumes.
+deletes matching unattached retained Firework local-storage volumes and local
+volume records whose bound EC2 instance no longer exists.
 
 Example:
   destroy-aws-data-plane.sh --region us-east-1 --project-name firework-demo -- -auto-approve
@@ -59,12 +60,25 @@ if [[ -n "$profile" ]]; then
   export AWS_PROFILE="$profile"
 fi
 
+if ! config_bucket=$(terraform -chdir="$script_dir/../terraform/data-plane/aws" output -raw configs_bucket_name 2>/dev/null); then
+  config_bucket=$(terraform -chdir="$script_dir/../terraform/control-plane/aws" output -raw config_bucket_name)
+fi
+if ! config_prefix=$(terraform -chdir="$script_dir/../terraform/data-plane/aws" output -raw configs_bucket_prefix 2>/dev/null); then
+  config_prefix=$(terraform -chdir="$script_dir/../terraform/control-plane/aws" output -raw config_prefix)
+fi
+
 (
   cd "$script_dir/../terraform/data-plane/aws"
   terraform destroy "${terraform_args[@]}"
 )
 
-cleanup_args=(--region "$region" --project-name "$project_name" --delete)
+cleanup_args=(
+  --region "$region"
+  --project-name "$project_name"
+  --config-bucket "$config_bucket"
+  --config-prefix "$config_prefix"
+  --delete
+)
 if [[ -n "$profile" ]]; then
   cleanup_args+=(--profile "$profile")
 fi
