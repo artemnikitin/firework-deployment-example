@@ -87,25 +87,39 @@ aws_args=()
 
 record_is_orphaned() {
   local bound_node="$1"
-  local state
+  local result state
 
   if [[ "$provider" == "aws" ]]; then
-    [[ "$bound_node" =~ ^i-[0-9a-f]+$ ]] || return 1
-    if state=$(aws "${aws_args[@]}" ec2 describe-instances \
+    if [[ ! "$bound_node" =~ ^i-[0-9a-f]+$ ]]; then
+      echo "ERROR: refusing malformed AWS bound_node $bound_node" >&2
+      return 2
+    fi
+    if result=$(aws "${aws_args[@]}" ec2 describe-instances \
       --instance-ids "$bound_node" \
       --query 'Reservations[0].Instances[0].State.Name' \
-      --output text 2>/dev/null); then
+      --output text 2>&1); then
+      state="$result"
       [[ -z "$state" || "$state" == "None" || "$state" == "shutting-down" || "$state" == "terminated" ]]
       return
     fi
-    return 0
+    if [[ "$result" == *"InvalidInstanceID.NotFound"* ]]; then
+      return 0
+    fi
+    echo "ERROR: failed to verify AWS bound node $bound_node: $result" >&2
+    return 2
   fi
 
-  [[ "$bound_node" =~ ^[a-z]([-a-z0-9]*[a-z0-9])?$ ]] || return 1
-  state=$(gcloud compute instances list \
+  if [[ ! "$bound_node" =~ ^[a-z]([-a-z0-9]*[a-z0-9])?$ ]]; then
+    echo "ERROR: refusing malformed GCP bound_node $bound_node" >&2
+    return 2
+  fi
+  if ! state=$(gcloud compute instances list \
     --project "$project" \
     --filter="name=($bound_node)" \
-    --format='value(status)')
+    --format='value(status)' 2>&1); then
+    echo "ERROR: failed to verify GCP bound node $bound_node: $state" >&2
+    return 2
+  fi
   [[ -z "$state" ]]
 }
 
@@ -124,6 +138,11 @@ inspect_record() {
   }
   if record_is_orphaned "$bound_node"; then
     orphan_records+=("${location}"$'\t'"${logical_id}"$'\t'"${bound_node}")
+  else
+    orphan_status=$?
+    if ((orphan_status > 1)); then
+      return "$orphan_status"
+    fi
   fi
 }
 
