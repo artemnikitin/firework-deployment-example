@@ -2,7 +2,8 @@
 
 This template builds an x86_64 Debian 12 image in the `firework-node-gcp`
 image family. It includes the Google Cloud CLI used at node startup to read
-Secret Manager and GCS. The builder uses an ephemeral external IP and does not
+Secret Manager and GCS, plus `e2fsprogs` and `nfs-common` for persistent
+storage pools. The builder uses an ephemeral external IP and does not
 depend on the data-plane VPC.
 
 Prerequisites: Packer, Application Default Credentials, Compute Engine API, and

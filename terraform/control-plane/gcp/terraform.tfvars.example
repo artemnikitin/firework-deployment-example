@@ -13,6 +13,9 @@ events_domain      = "events.gcp.example.com"
 # a DNS-based registry_url/registry_server_name. When auto_create_demo_secrets = true,
 # the auto-generated registry TLS cert will use a DNS SAN for registry.<base_domain>.
 # base_domain = "gcp.example.com"
+# Must match terraform/data-plane/gcp base_domain so the status API can turn
+# metadata.subdomain into the same public hostname used by Traefik.
+service_ingress_domain = "gcp.example.com"
 state_bucket_name  = "firework-cp-state-my-gcp-project"
 controlplane_image = "ghcr.io/artemnikitin/firework-controlplane:dev"
 # When reusing a mutable image tag, update this to the newly published digest

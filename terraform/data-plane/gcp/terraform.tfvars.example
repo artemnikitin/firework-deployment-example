@@ -26,3 +26,18 @@ node_zones = [
   "us-central1-b",
   "us-central1-f",
 ]
+
+# Persistent storage is disabled by default. Enable either block independently.
+# Local volumes use a retained stateful Hyperdisk Balanced disk per MIG instance.
+# enable_local_storage   = true
+# local_storage_size_gib = 500
+# local_storage_capacity = "450Gi"
+
+# Shared volumes use Regional Filestore with NFSv4.1. Provisioned Filestore
+# capacity is resized separately from application quotas.
+# enable_shared_storage         = true
+# shared_storage_backend_id     = "primary"
+# shared_storage_capacity       = "900Gi"
+# filestore_tier                = "REGIONAL"
+# filestore_capacity_gib        = 1024
+# filestore_deletion_protection = true

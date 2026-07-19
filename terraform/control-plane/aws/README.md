@@ -113,7 +113,9 @@ mode-0600 file and keep it out of command arguments:
 aws secretsmanager get-secret-value \
   --secret-id "$(terraform output -raw operator_token_secret_arn)" \
   --query SecretString --output text > operator-token
+
 chmod 0600 operator-token
+
 fireworkctl --endpoint "$(terraform output -raw api_url)" \
   --token-file operator-token nodes
 ```

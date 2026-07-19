@@ -55,6 +55,92 @@ variable "node_count" {
   }
 }
 
+# --- Persistent storage (disabled by default) ---
+
+variable "enable_local_storage" {
+  type        = bool
+  default     = false
+  description = "Attach one stateful Hyperdisk Balanced data disk to every MIG instance for Firework local volumes."
+}
+
+variable "local_storage_size_gib" {
+  type        = number
+  default     = 500
+  description = "Physical Hyperdisk size per node in GiB."
+
+  validation {
+    condition     = var.local_storage_size_gib >= 10
+    error_message = "local_storage_size_gib must be at least 10 GiB."
+  }
+}
+
+variable "local_storage_capacity" {
+  type        = string
+  default     = "450Gi"
+  description = "Firework logical admission budget rendered to storage.local.capacity."
+
+  validation {
+    condition     = can(regex("^[1-9][0-9]*(Mi|Gi|Ti)$", var.local_storage_capacity))
+    error_message = "local_storage_capacity must be a positive integer followed by Mi, Gi, or Ti."
+  }
+}
+
+variable "enable_shared_storage" {
+  type        = bool
+  default     = false
+  description = "Provision Regional Filestore with NFSv4.1 and mount it on every node."
+}
+
+variable "shared_storage_backend_id" {
+  type        = string
+  default     = "primary"
+  description = "Stable deployment-wide identity written to the shared root and rendered to Firework."
+
+  validation {
+    condition     = can(regex("^[a-z0-9][a-z0-9-]{0,62}$", var.shared_storage_backend_id))
+    error_message = "shared_storage_backend_id must be a lowercase DNS-label-like value."
+  }
+}
+
+variable "shared_storage_capacity" {
+  type        = string
+  default     = "900Gi"
+  description = "Aggregate Firework admission budget. Keep below Filestore provisioned capacity."
+
+  validation {
+    condition     = can(regex("^[1-9][0-9]*(Mi|Gi|Ti)$", var.shared_storage_capacity))
+    error_message = "shared_storage_capacity must be a positive integer followed by Mi, Gi, or Ti."
+  }
+}
+
+variable "filestore_tier" {
+  type        = string
+  default     = "REGIONAL"
+  description = "Filestore tier supporting NFSv4.1."
+
+  validation {
+    condition     = contains(["REGIONAL", "ENTERPRISE", "ZONAL", "HIGH_SCALE_SSD"], var.filestore_tier)
+    error_message = "filestore_tier must support NFSv4.1."
+  }
+}
+
+variable "filestore_capacity_gib" {
+  type        = number
+  default     = 1024
+  description = "Provisioned Filestore capacity in GiB. Tier/region minimums still apply."
+
+  validation {
+    condition     = var.filestore_capacity_gib >= 100
+    error_message = "filestore_capacity_gib must be at least 100 GiB; verify the selected tier's regional minimum."
+  }
+}
+
+variable "filestore_deletion_protection" {
+  type        = bool
+  default     = true
+  description = "Protect retained shared data from Terraform deletion. Disable only for deliberate teardown after backups."
+}
+
 variable "node_zones" {
   type        = list(string)
   default     = null

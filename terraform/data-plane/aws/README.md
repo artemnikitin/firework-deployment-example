@@ -30,6 +30,18 @@ This stack depends on:
 
 Apply order is strict: deploy `terraform/control-plane/aws` first, then `terraform/data-plane/aws`.
 
+### Node bootstrap network readiness
+
+Instances can start while NAT gateways and private-subnet routes are still
+converging. The ASG waits for private route-table associations, and node
+user-data additionally waits for the regional EC2 endpoint before doing
+metadata or storage setup. It then retries AWS API, S3, Secrets Manager,
+package, and step-ca calls with bounded exponential backoff. This keeps a
+transient network timeout from making cloud-init's one-shot bootstrap fail
+permanently. The launch template gzip-compresses user-data before base64
+encoding so the complete bootstrap remains within EC2's 16 KiB raw-payload
+limit; Amazon Linux cloud-init expands it before execution.
+
 ## Minimal Input (quick start)
 
 With control-plane auto-wiring enabled, the minimum required `terraform.tfvars` values are:
@@ -221,8 +233,62 @@ Remaining constraints:
 - The remote service must have at least one `port_forwards` entry so the host-side port
   is known.
 
-## Destroy
+## Persistent storage
+
+Both storage backends are disabled by default:
+
+- `enable_local_storage=true` attaches a separate encrypted gp3 disk with
+  `delete_on_termination=false`. Startup formats only a blank device, mounts it
+  by UUID at `/var/lib/firework/volumes`, and renders the configured logical
+  admission budget. Startup tags the disk with `FireworkNodeID=<instance-id>`
+  for recovery. ASG replacement leaves the old disk detached and the old
+  node binding pending; it is never auto-attached to a replacement instance.
+- `enable_shared_storage=true` creates encrypted Regional EFS, one mount target
+  per private subnet, a node-only NFS security group, and an optional access
+  point. Nodes mount it with TLS before the agent starts and verify a stable
+  backend marker. Shared application placement remains safety-gated in
+  Firework until durable per-VM fencing is available.
+
+Application quota changes resize only the retained ext4 image. Expand the gp3
+disk or adjust the EFS admission budget separately before retrying a quota
+growth. Back up data before any shrink.
+
+Local disks and EFS are intentionally retained. Inspect detached local disks
+without changing them:
 
 ```bash
-terraform destroy
+./scripts/cleanup-orphaned-aws-volumes.sh \
+  --region us-east-1 \
+  --project-name firework-demo \
+  --config-bucket firework-demo-configs-example \
+  --config-prefix cp/v1/
 ```
+
+For a deliberate clean data-plane teardown that also permanently deletes
+matching unattached local disks and retained local-volume records bound to
+instances that no longer exist, run this from the repository root:
+
+```bash
+./scripts/destroy-aws-data-plane.sh \
+  --region us-east-1 \
+  --project-name firework-demo \
+  -- -auto-approve
+```
+
+The cleanup scripts are deliberately dry-run by default. The destroy wrapper
+captures the config bucket and prefix before Terraform removes the data-plane
+outputs, then passes the explicit `--delete` flag only after a successful
+destroy. Active or stopped EC2 bindings are never selected. This keeps a later
+fresh provision from inheriting a binding to a deleted instance without
+weakening Firework's fail-closed behavior for ordinary node loss. EFS is not
+included in this cleanup. EFS has Terraform `prevent_destroy`; for
+deliberate stack teardown, first destroy its access point/mount targets/security
+group, remove the EFS resource from Terraform state so it remains retained,
+then destroy the rest. Delete the file system manually only after a backup and
+explicit data-retention decision.
+
+## Destroy
+
+Use the wrapper above when local persistent storage and its logical bindings
+should be deleted with the data plane. Use `terraform destroy` directly when
+retained disks and bindings must be preserved for explicit recovery.

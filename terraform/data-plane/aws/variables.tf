@@ -190,6 +190,70 @@ variable "node_volume_size" {
   default     = 50
 }
 
+# --- Persistent storage (disabled by default) ---
+
+variable "enable_local_storage" {
+  description = "Attach one encrypted retained gp3 data disk to every node for Firework local volumes."
+  type        = bool
+  default     = false
+}
+
+variable "local_storage_size_gib" {
+  description = "Physical gp3 data-disk size per node in GiB. Cloud disks are grown separately from application volume quotas."
+  type        = number
+  default     = 500
+
+  validation {
+    condition     = var.local_storage_size_gib >= 10
+    error_message = "local_storage_size_gib must be at least 10 GiB."
+  }
+}
+
+variable "local_storage_capacity" {
+  description = "Firework logical admission budget rendered to storage.local.capacity. Keep below physical disk size."
+  type        = string
+  default     = "450Gi"
+
+  validation {
+    condition     = can(regex("^[1-9][0-9]*(Mi|Gi|Ti)$", var.local_storage_capacity))
+    error_message = "local_storage_capacity must be a positive integer followed by Mi, Gi, or Ti."
+  }
+}
+
+variable "enable_shared_storage" {
+  description = "Provision encrypted regional EFS and mount it on nodes. Firework shared runtime remains safety-gated until durable fencing is enabled."
+  type        = bool
+  default     = false
+}
+
+variable "shared_storage_backend_id" {
+  description = "Stable deployment-wide identity written to the shared root and rendered to the agent."
+  type        = string
+  default     = "primary"
+
+  validation {
+    condition     = can(regex("^[a-z0-9][a-z0-9-]{0,62}$", var.shared_storage_backend_id))
+    error_message = "shared_storage_backend_id must be a lowercase DNS-label-like value."
+  }
+}
+
+variable "shared_storage_capacity" {
+  description = "Optional aggregate Firework admission budget for EFS. Empty leaves aggregate admission unbounded."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.shared_storage_capacity == "" || can(regex("^[1-9][0-9]*(Mi|Gi|Ti)$", var.shared_storage_capacity))
+    error_message = "shared_storage_capacity must be empty or a positive integer followed by Mi, Gi, or Ti."
+  }
+}
+
+variable "shared_storage_use_access_point" {
+  description = "Mount EFS through a dedicated Firework access point."
+  type        = bool
+  default     = true
+}
+
 # --- Networking (microVM guest) ---
 
 variable "vm_subnet" {

@@ -50,6 +50,58 @@ terraform apply
 Certificate Manager issuance commonly takes 15–60 minutes after DNS
 authorization propagates. Nodes have no external IP; use IAP for SSH.
 
+## Persistent storage
+
+Storage remains disabled unless explicitly enabled:
+
+- `enable_local_storage=true` adds a stateful Hyperdisk Balanced disk named
+  `firework-volumes` to each instance. The regional MIG uses `delete_rule =
+  "NEVER"`, preserves instance names with `RECREATE`, disables proactive zone
+  redistribution, and uses an unavailable (non-surge) rollout. Startup formats
+  only a blank disk and mounts it by UUID at `/var/lib/firework/volumes`.
+- `enable_shared_storage=true` enables the Filestore API and creates a Regional
+  NFSv4.1 share on the node VPC. Nodes mount it before the agent starts and
+  verify the configured backend identity marker. The default 1 TiB capacity is
+  a material cost; confirm tier/region minimums before applying. Shared
+  application placement remains safety-gated until Firework's durable fencing
+  work is complete.
+
+Application quota resize affects only `volume.ext4`, not Hyperdisk or
+Filestore capacity. Grow the provider backend separately and back up before
+shrinking an application quota.
+
+Stateful disks use `NEVER` and can remain after MIG deletion. Inspect matching
+unattached Firework `pd-balanced` or `hyperdisk-balanced` local-storage disks
+without changing them:
+
+```bash
+./scripts/cleanup-orphaned-gcp-volumes.sh \
+  --project example-project \
+  --deployment-name firework \
+  --config-bucket firework-control-plane-state \
+  --config-prefix cp/v1/
+```
+
+For a deliberate clean data-plane teardown that also permanently deletes
+matching unattached local disks and retained local-volume records bound to
+instances that no longer exist, run this from the repository root:
+
+```bash
+./scripts/destroy-gcp-data-plane.sh \
+  --project example-project \
+  --deployment-name firework \
+  -- -auto-approve
+```
+
+The cleanup scripts are deliberately dry-run by default. The destroy wrapper
+captures the config bucket and prefix before Terraform removes the data-plane
+outputs, then passes the explicit `--delete` flag only after a successful
+destroy. Bindings to existing Compute Engine instances are never selected.
+This keeps a later fresh provision from inheriting a binding to a deleted MIG
+instance without weakening Firework's fail-closed behavior for ordinary node
+loss. Filestore deletion protection defaults to true; disable it only for
+deliberate teardown.
+
 ## Routing domain
 
 `base_domain` (for example `gcp.example.com`) is the single source of truth for

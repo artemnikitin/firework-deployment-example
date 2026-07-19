@@ -162,9 +162,29 @@ data "aws_iam_policy_document" "node_ec2_self" {
     actions = [
       "ec2:ModifyInstanceAttribute",
       "ec2:DescribeTags",
+      "ec2:DescribeVolumes",
     ]
     resources = ["*"]
   }
+}
+
+data "aws_iam_policy_document" "node_tag_retained_volume" {
+  statement {
+    actions   = ["ec2:CreateTags"]
+    resources = ["arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:volume/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:ResourceTag/Retention"
+      values   = ["manual"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "node_tag_retained_volume" {
+  name   = "${var.project_name}-node-tag-retained-volume"
+  role   = aws_iam_role.node.id
+  policy = data.aws_iam_policy_document.node_tag_retained_volume.json
 }
 
 resource "aws_iam_role_policy" "node_ec2_self" {

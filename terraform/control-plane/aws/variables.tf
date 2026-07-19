@@ -172,6 +172,22 @@ variable "status_hosted_zone_name" {
   default     = ""
 }
 
+variable "service_ingress_domain" {
+  description = "Deployment-owned DNS suffix used by the status API/UI to resolve service metadata.subdomain into https://<subdomain>.<service_ingress_domain>. Must match the data-plane domain_name. Leave empty only when services use exact metadata.host values or have no public routes."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.service_ingress_domain == "" || can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$", var.service_ingress_domain))
+    error_message = "service_ingress_domain must be empty or a canonical lowercase multi-label DNS name (for example example.com) with no trailing dot, scheme, port, path, or wildcard."
+  }
+
+  validation {
+    condition     = length(var.service_ingress_domain) <= 253
+    error_message = "service_ingress_domain must be at most 253 characters."
+  }
+}
+
 variable "controlplane_image" {
   description = "OCI image URL for firework-controlplane (for example ghcr.io/org/firework-controlplane:tag)."
   type        = string

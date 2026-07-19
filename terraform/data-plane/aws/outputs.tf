@@ -34,6 +34,11 @@ output "configs_bucket_prefix" {
   value       = local.effective_s3_configs_prefix
 }
 
+output "configs_bucket_name" {
+  description = "S3 bucket containing rendered configs and retained volume records"
+  value       = local.effective_s3_configs_bucket_id
+}
+
 output "registry_url" {
   description = "Resolved control-plane registry URL used by nodes"
   value       = local.effective_registry_url
@@ -87,4 +92,24 @@ output "observability_dashboard_name" {
 output "agent_metric_namespace" {
   description = "CloudWatch metric namespace used by firework-agent nodes"
   value       = local.agent_metric_namespace
+}
+
+output "local_storage_enabled" {
+  description = "Whether retained per-node gp3 storage is enabled"
+  value       = var.enable_local_storage
+}
+
+output "shared_storage_efs_id" {
+  description = "EFS file-system ID for the shared Firework storage backend"
+  value       = var.enable_shared_storage ? aws_efs_file_system.shared[0].id : null
+}
+
+output "shared_storage_backend_id" {
+  description = "Stable Firework shared backend identity"
+  value       = var.enable_shared_storage ? var.shared_storage_backend_id : null
+}
+
+output "shared_storage_access_point_id" {
+  description = "Optional EFS access point mounted by Firework nodes"
+  value       = var.enable_shared_storage && var.shared_storage_use_access_point ? aws_efs_access_point.shared[0].id : null
 }

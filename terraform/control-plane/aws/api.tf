@@ -44,6 +44,7 @@ locals {
         'role: "api"' \
         'api_listen_addr: "${var.api_listen_addr}"' \
         'operator_token_file: "/tmp/firework/secrets/operator-token"' \
+        'ingress_domain: "${var.service_ingress_domain}"' \
         'state:' \
         '  backend: "s3"' \
         '  prefix: "${local.state_prefix_clean}"' \

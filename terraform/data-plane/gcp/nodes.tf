@@ -32,6 +32,17 @@ resource "google_compute_instance_template" "node" {
     disk_type = local.node_uses_hyperdisk ? "hyperdisk-balanced" : "pd-ssd"
   }
 
+  dynamic "disk" {
+    for_each = var.enable_local_storage ? [1] : []
+    content {
+      auto_delete  = false
+      boot         = false
+      device_name  = "firework-volumes"
+      disk_size_gb = var.local_storage_size_gib
+      disk_type    = local.node_uses_hyperdisk ? "hyperdisk-balanced" : "pd-balanced"
+    }
+  }
+
   network_interface {
     subnetwork = google_compute_subnetwork.nodes.id
     nic_type   = local.node_requires_gvnic ? "GVNIC" : "VIRTIO_NET"
@@ -69,6 +80,13 @@ resource "google_compute_instance_template" "node" {
     registry_server_name      = local.effective_registry_server_name
     registry_ca_secret        = data.google_secret_manager_secret.registry_ca.secret_id
     registry_bootstrap_secret = data.google_secret_manager_secret.bootstrap_token.secret_id
+    enable_local_storage      = var.enable_local_storage
+    local_storage_capacity    = var.local_storage_capacity
+    enable_shared_storage     = var.enable_shared_storage
+    shared_storage_backend_id = var.shared_storage_backend_id
+    shared_storage_capacity   = var.shared_storage_capacity
+    filestore_ip              = var.enable_shared_storage ? google_filestore_instance.shared[0].networks[0].ip_addresses[0] : ""
+    filestore_share           = var.enable_shared_storage ? google_filestore_instance.shared[0].file_shares[0].name : ""
   })
 
   lifecycle {
@@ -98,6 +116,11 @@ resource "google_compute_region_instance_group_manager" "nodes" {
   base_instance_name = "${local.name_prefix}-node"
   target_size        = var.node_count
 
+  # Do not report a successful apply while quota or capacity errors leave the
+  # manager with fewer running instances than its target size.
+  wait_for_instances        = true
+  wait_for_instances_status = "STABLE"
+
   distribution_policy_zones = local.effective_node_zones
 
   version {
@@ -114,6 +137,14 @@ resource "google_compute_region_instance_group_manager" "nodes" {
     initial_delay_sec = 300
   }
 
+  dynamic "stateful_disk" {
+    for_each = var.enable_local_storage ? [1] : []
+    content {
+      device_name = "firework-volumes"
+      delete_rule = "NEVER"
+    }
+  }
+
   # A region migration creates a new MIG before the global backend service is
   # switched away from the old one. Without this ordering, Compute Engine
   # rejects deletion because the old MIG is still attached to that backend.
@@ -128,8 +159,9 @@ resource "google_compute_region_instance_group_manager" "nodes" {
     # values must therefore be zero or at least the three-zone distribution.
     # Keep all current nodes available while one replacement is created per
     # zone.
-    max_surge_fixed              = 3
-    max_unavailable_fixed        = 0
-    instance_redistribution_type = "PROACTIVE"
+    max_surge_fixed              = var.enable_local_storage ? 0 : 3
+    max_unavailable_fixed        = var.enable_local_storage ? 3 : 0
+    replacement_method           = var.enable_local_storage ? "RECREATE" : "SUBSTITUTE"
+    instance_redistribution_type = var.enable_local_storage ? "NONE" : "PROACTIVE"
   }
 }

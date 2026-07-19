@@ -39,6 +39,25 @@ resource "google_compute_backend_service" "traefik" {
     balancing_mode  = "UTILIZATION"
     capacity_scaler = 1.0
   }
+
+  # Compute accepts a health-check create operation before that health check is
+  # usable by a backend service. Wait only after a new health-check ID appears
+  # to avoid the resourceNotReady race during a first data-plane apply.
+  depends_on = [time_sleep.node_health_check_ready]
+}
+
+resource "time_sleep" "node_health_check_ready" {
+  create_duration = "60s"
+
+  triggers = {
+    health_check_id = google_compute_health_check.node.id
+    instance_group  = google_compute_region_instance_group_manager.nodes.instance_group
+  }
+
+  # The health check and regional MIG are created concurrently. Starting the
+  # delay only after the MIG completes prevents it from being consumed while
+  # the backend is still waiting for its instance group.
+  depends_on = [google_compute_region_instance_group_manager.nodes]
 }
 
 resource "google_compute_url_map" "tenant" {

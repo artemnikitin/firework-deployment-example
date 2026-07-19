@@ -3,7 +3,7 @@ set -euo pipefail
 
 sudo apt-get update -y
 sudo apt-get install -y --no-install-recommends \
-  ca-certificates gnupg jq curl unzip iptables iproute2 procps
+  ca-certificates gnupg jq curl unzip iptables iproute2 procps e2fsprogs nfs-common
 
 # N4 instances require gVNIC. Fail the image build if the Debian cloud kernel
 # does not provide the driver that the image advertises to Compute Engine.

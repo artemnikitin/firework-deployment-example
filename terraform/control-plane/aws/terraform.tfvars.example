@@ -18,6 +18,9 @@ events_domain_name = "events.example.com"
 # Optional zone override (if omitted, derived from events_domain_name by stripping the first label).
 # events_hosted_zone_name = "example.com"
 # status_hosted_zone_name = "example.com"
+# Must match terraform/data-plane/aws domain_name so the status API can turn
+# metadata.subdomain into the same public hostname used by Traefik.
+service_ingress_domain = "example.com"
 # Set this when supplying a pre-existing certificate instead of allowing the
 # stack to create one for the status hostname.
 # status_acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"

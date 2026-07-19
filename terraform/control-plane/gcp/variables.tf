@@ -55,6 +55,22 @@ variable "base_domain" {
   description = "Optional base domain for the registry DNS A record (e.g. gcp.example.com). When set, creates registry.<base_domain> and outputs a DNS-based registry_url/registry_server_name instead of an IP-based one. The operator must provision the registry TLS cert with a DNS SAN matching registry.<base_domain>."
 }
 
+variable "service_ingress_domain" {
+  type        = string
+  default     = ""
+  description = "Deployment-owned DNS suffix used by the status API/UI to resolve service metadata.subdomain into https://<subdomain>.<service_ingress_domain>. Must match the data-plane base_domain. Leave empty only when services use exact metadata.host values or have no public routes."
+
+  validation {
+    condition     = var.service_ingress_domain == "" || can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$", var.service_ingress_domain))
+    error_message = "service_ingress_domain must be empty or a canonical lowercase multi-label DNS name (for example gcp.example.com) with no trailing dot, scheme, port, path, or wildcard."
+  }
+
+  validation {
+    condition     = length(var.service_ingress_domain) <= 253
+    error_message = "service_ingress_domain must be at most 253 characters."
+  }
+}
+
 variable "state_bucket_name" {
   type        = string
   description = "Globally unique GCS bucket for Firework control-plane state/configs"

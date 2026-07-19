@@ -98,13 +98,24 @@ the GCP guides above for container image, DNS delegation, and TLS prerequisites.
 Destroy each provider in reverse order. AWS stacks can be destroyed in a single step. **GCP requires two steps for the control-plane** because the state bucket has versioning enabled and `force_destroy` defaults to `false`:
 
 ```bash
-# AWS
-cd terraform/data-plane/aws && terraform destroy
-cd ../../control-plane/aws && terraform destroy
+# AWS — clean teardown deletes retained local disks and orphaned bindings
+./scripts/destroy-aws-data-plane.sh \
+  --region us-east-1 \
+  --project-name firework-demo \
+  -- -auto-approve
+cd terraform/control-plane/aws && terraform destroy
 
-# GCP — unlock the state bucket first, then destroy
-cd terraform/data-plane/gcp && terraform destroy
-cd ../../control-plane/gcp
+# GCP — clean teardown deletes retained local disks and orphaned bindings
+./scripts/destroy-gcp-data-plane.sh \
+  --project example-project \
+  --deployment-name firework \
+  -- -auto-approve
+cd terraform/control-plane/gcp
 terraform apply -var='state_bucket_force_destroy=true' -target=google_storage_bucket.state
 terraform destroy -var='state_bucket_force_destroy=true'
 ```
+
+The data-plane wrappers capture the control-plane state bucket before destroy,
+then remove only local-volume records whose bound cloud node no longer exists.
+Use raw `terraform destroy` instead when retained disks and their fail-closed
+bindings must be preserved for explicit recovery.
