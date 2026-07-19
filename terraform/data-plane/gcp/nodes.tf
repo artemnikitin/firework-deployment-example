@@ -116,6 +116,11 @@ resource "google_compute_region_instance_group_manager" "nodes" {
   base_instance_name = "${local.name_prefix}-node"
   target_size        = var.node_count
 
+  # Do not report a successful apply while quota or capacity errors leave the
+  # manager with fewer running instances than its target size.
+  wait_for_instances        = true
+  wait_for_instances_status = "STABLE"
+
   distribution_policy_zones = local.effective_node_zones
 
   version {

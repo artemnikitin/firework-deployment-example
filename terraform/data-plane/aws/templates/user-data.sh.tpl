@@ -64,7 +64,11 @@ if [ "$LOCAL_STORAGE_ENABLED" = "true" ]; then
       [ -b "$_device" ] || continue
       if command -v ebsnvme-id >/dev/null 2>&1; then
         _mapping=$(ebsnvme-id -u "$_device" 2>/dev/null || true)
-        if [ "$_mapping" = "/dev/sdf" ]; then
+        # amazon-ec2-utils returns the normalized mapping name without the
+        # /dev/ prefix (for example "sdf"). Accept either representation so
+        # Nitro NVMe devices resolve to the launch-template mapping reliably.
+        _mapping=$(basename "$_mapping")
+        if [ "$_mapping" = "sdf" ]; then
           LOCAL_STORAGE_DEVICE="$_device"
           break
         fi
@@ -82,14 +86,14 @@ if [ "$LOCAL_STORAGE_ENABLED" = "true" ]; then
   fi
 
   LOCAL_STORAGE_VOLUME_ID=$(aws ec2 describe-volumes \
-    --region "$REGION" \
+    --region "$S3_REGION" \
     --filters "Name=attachment.instance-id,Values=$INSTANCE_ID" "Name=attachment.device,Values=/dev/sdf" \
     --query 'Volumes[0].VolumeId' --output text)
   if [ -z "$LOCAL_STORAGE_VOLUME_ID" ] || [ "$LOCAL_STORAGE_VOLUME_ID" = "None" ]; then
     echo "ERROR: retained local storage volume ID was not found"
     exit 1
   fi
-  aws ec2 create-tags --region "$REGION" --resources "$LOCAL_STORAGE_VOLUME_ID" \
+  aws ec2 create-tags --region "$S3_REGION" --resources "$LOCAL_STORAGE_VOLUME_ID" \
     --tags "Key=FireworkNodeID,Value=$INSTANCE_ID"
 
   _filesystem=$(blkid -o value -s TYPE "$LOCAL_STORAGE_DEVICE" 2>/dev/null || true)
