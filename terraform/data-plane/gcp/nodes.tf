@@ -69,24 +69,36 @@ resource "google_compute_instance_template" "node" {
   }
 
   metadata_startup_script = templatefile("${path.module}/templates/startup-script.sh.tpl", {
-    gcp_project               = var.gcp_project
-    gcs_configs_bucket        = local.effective_config_bucket_name
-    gcs_configs_prefix        = local.effective_config_prefix
-    gcs_images_bucket         = var.images_bucket_name
-    ingress_domain            = trimsuffix(var.base_domain, ".")
-    vm_subnet                 = var.vm_subnet
-    vm_gateway                = var.vm_gateway
-    registry_url              = local.effective_registry_url
-    registry_server_name      = local.effective_registry_server_name
-    registry_ca_secret        = data.google_secret_manager_secret.registry_ca.secret_id
-    registry_bootstrap_secret = data.google_secret_manager_secret.bootstrap_token.secret_id
+    gcp_project          = var.gcp_project
+    gcs_configs_bucket   = local.effective_config_bucket_name
+    gcs_configs_prefix   = local.effective_config_prefix
+    gcs_images_bucket    = var.images_bucket_name
+    ingress_domain       = trimsuffix(var.base_domain, ".")
+    vm_subnet            = var.vm_subnet
+    vm_gateway           = var.vm_gateway
+    registry_url         = local.effective_registry_url
+    registry_server_name = local.effective_registry_server_name
+    # The startup script is evaluated even for `terraform destroy`. The
+    # control-plane state can already be gone then, so keep these values
+    # non-null and use the effective IDs directly instead of requiring a
+    # refreshed Secret Manager data source during teardown.
+    registry_ca_secret = try(
+      data.google_secret_manager_secret.registry_ca[0].secret_id == null ? "" : data.google_secret_manager_secret.registry_ca[0].secret_id,
+      local.effective_registry_ca_secret_id == null ? "" : local.effective_registry_ca_secret_id,
+    )
+    registry_bootstrap_secret = try(
+      data.google_secret_manager_secret.bootstrap_token[0].secret_id == null ? "" : data.google_secret_manager_secret.bootstrap_token[0].secret_id,
+      local.effective_registry_bootstrap_token_secret_id == null ? "" : local.effective_registry_bootstrap_token_secret_id,
+    )
     enable_local_storage      = var.enable_local_storage
     local_storage_capacity    = var.local_storage_capacity
     enable_shared_storage     = var.enable_shared_storage
     shared_storage_backend_id = var.shared_storage_backend_id
     shared_storage_capacity   = var.shared_storage_capacity
-    filestore_ip              = var.enable_shared_storage ? google_filestore_instance.shared[0].networks[0].ip_addresses[0] : ""
-    filestore_share           = var.enable_shared_storage ? google_filestore_instance.shared[0].file_shares[0].name : ""
+    # The optional Filestore instance can already be absent while Terraform
+    # is evaluating the destroy configuration.
+    filestore_ip    = try(google_filestore_instance.shared[0].networks[0].ip_addresses[0], "")
+    filestore_share = try(google_filestore_instance.shared[0].file_shares[0].name, "")
   })
 
   lifecycle {
