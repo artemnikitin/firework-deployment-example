@@ -194,3 +194,14 @@ The state/config bucket has versioning enabled and `force_destroy` defaults to `
 ```bash
 terraform destroy
 ```
+
+## Getting access to underlying Kubernetes cluster
+
+To get access to underlying Kubernetes cluster use
+
+```bash
+gcloud container clusters get-credentials firework-cp-cluster \
+  --region us-central1 --project <project name>
+```
+
+Then `kubectl get pods -A` should just work.
