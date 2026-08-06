@@ -2,7 +2,7 @@
 # Install the architecture-matched Traefik reverse proxy.
 set -euo pipefail
 
-TRAEFIK_VERSION="${TRAEFIK_VERSION:-3.3.4}"
+TRAEFIK_VERSION="${TRAEFIK_VERSION:-3.7.10}"
 case "$(uname -m)" in
   aarch64) ARCH="arm64" ;;
   x86_64) ARCH="amd64" ;;

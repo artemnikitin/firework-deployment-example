@@ -1,8 +1,10 @@
 gcp_project        = "my-gcp-project"
 zone               = "us-central1-a"
 machine_type       = "n2-standard-2"
-firecracker_version = "1.12.0"
-traefik_version     = "3.3.4"
+firecracker_version = "1.16.1"
+# Firecracker 1.16.1 has no v1.16 kernel prefix in the official CI bucket.
+firecracker_kernel_version = "1.15"
+traefik_version     = "3.7.10"
 
 # Optional local linux/amd64 agent binary. Otherwise a GitHub release is used.
 # firework_agent_path = "../../firework/bin/firework-agent-linux-amd64"

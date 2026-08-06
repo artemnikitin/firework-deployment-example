@@ -24,6 +24,11 @@ rootfs bucket fails at microVM start, not at deploy time.
 All provisioning scripts in `packer/scripts/` resolve their downloads from
 `uname -m`, so they need no changes between architectures.
 
+The current pinned components are Firecracker `1.16.1`, Traefik `3.7.10`, and
+the Firecracker CI kernel family `1.15`. Firecracker `1.16.1` is the latest
+binary release, but the official CI bucket currently does not publish a
+`v1.16` kernel prefix, so the kernel family is pinned independently.
+
 ## What this AMI contains
 
 - Amazon Linux 2023 (x86_64 by default, arm64 supported)

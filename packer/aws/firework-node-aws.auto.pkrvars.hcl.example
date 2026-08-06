@@ -3,8 +3,11 @@
 aws_region          = "us-east-1"
 architecture        = "x86_64"      # or "arm64" for bare-metal Graviton nodes
 instance_type       = "t3.large"    # any instance of the target arch works; use t4g.large for arm64
-firecracker_version = "1.12.0"
-traefik_version     = "3.3.4"
+# For arm64, also set source_ami_name to the AL2023 arm64 name pattern.
+firecracker_version = "1.16.1"
+# Firecracker 1.16.1 has no v1.16 kernel prefix in the official CI bucket.
+firecracker_kernel_version = "1.15"
+traefik_version     = "3.7.10"
 
 # Required when the account has no default VPC — set both or neither.
 # The subnet must be a public subnet so Packer can SSH into the builder instance.

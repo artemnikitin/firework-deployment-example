@@ -47,12 +47,18 @@ variable "source_ami_owner" {
 
 variable "firecracker_version" {
   type    = string
-  default = "1.12.0"
+  default = "1.16.1"
+}
+
+variable "firecracker_kernel_version" {
+  type        = string
+  default     = "1.15"
+  description = "Firecracker CI kernel family. Firecracker 1.16.1 currently has no matching v1.16 kernel prefix in the official CI bucket, so use the latest compatible stable family unless overridden."
 }
 
 variable "traefik_version" {
   type    = string
-  default = "3.3.4"
+  default = "3.7.10"
 }
 
 variable "firework_agent_path" {
@@ -191,10 +197,8 @@ build {
 
   # --- Install Firecracker ---
   provisioner "shell" {
-    script = "${path.root}/../scripts/02-install-firecracker.sh"
-    environment_vars = [
-      "FIRECRACKER_VERSION=${var.firecracker_version}",
-    ]
+    script           = "${path.root}/../scripts/02-install-firecracker.sh"
+    environment_vars = ["FIRECRACKER_VERSION=${var.firecracker_version}"]
   }
 
   # --- Download Firecracker-compatible kernel ---
@@ -202,6 +206,7 @@ build {
     script = "${path.root}/../scripts/02a-download-kernel.sh"
     environment_vars = [
       "FIRECRACKER_VERSION=${var.firecracker_version}",
+      "FIRECRACKER_KERNEL_VERSION=${var.firecracker_kernel_version}",
     ]
   }
 

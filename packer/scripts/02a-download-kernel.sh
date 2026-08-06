@@ -7,9 +7,11 @@ IMAGES_DIR="/var/lib/images"
 
 sudo mkdir -p "$IMAGES_DIR"
 
-# The Firecracker CI S3 bucket uses a two-part version prefix (e.g. v1.12),
-# not the full semver tag (e.g. v1.12.0). Strip the patch component.
-CI_VERSION="v$(echo "${FIRECRACKER_VERSION}" | cut -d. -f1,2)"
+# The Firecracker CI kernel family is intentionally independent from the
+# Firecracker binary version. New Firecracker releases do not necessarily
+# publish a matching kernel prefix in the CI bucket.
+CI_VERSION="${FIRECRACKER_KERNEL_VERSION:-1.15}"
+CI_VERSION="v${CI_VERSION#v}"
 
 # Discover the latest 5.10.x kernel available for this CI version.
 KERNEL_KEY=$(curl -fsSL \
