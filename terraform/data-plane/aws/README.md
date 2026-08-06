@@ -5,7 +5,8 @@ This stack provisions the data plane with Firework.
 It creates:
 
 - VPC with public/private subnets across two AZs
-- NAT gateways for outbound traffic from private subnets
+- S3 gateway VPC endpoint for image, config, and package traffic
+- NAT gateways, only when nodes are placed in private subnets
 - ALB (HTTPS) forwarding to Traefik on Firework nodes
 - Node security groups and IAM role
 - Launch template + Auto Scaling Group for Firework nodes
@@ -30,12 +31,121 @@ This stack depends on:
 
 Apply order is strict: deploy `terraform/control-plane/aws` first, then `terraform/data-plane/aws`.
 
+## Cost, node placement, and node instance type
+
+This is a demo stack, and the defaults are tuned to keep an idle deployment
+cheap rather than to model a production topology. Read this section before
+copying the network layout into anything real.
+
+### Node network placement
+
+`node_network_placement` controls where Firecracker nodes run.
+
+| Value | Egress path | NAT gateways | Notes |
+| --- | --- | --- | --- |
+| `public` (default) | Internet gateway | none | Cheapest at demo scale |
+| `private` | NAT gateway | 1 or 2 | Previous behaviour |
+
+Internet gateway egress has no hourly or per-GB processing charge, so `public`
+placement removes the NAT gateway line from the bill entirely. The cost becomes
+one public IPv4 address per node, billed per address-hour.
+
+**`public` placement has real security consequences. They are not theoretical:**
+
+- **Source/destination check is disabled on these nodes.** It is turned off in
+  user-data because east-west microVM traffic between nodes needs VPC routing to
+  work. On a private subnet the blast radius is the VPC. On a public subnet with
+  an internet gateway route, a node can emit packets with arbitrary source
+  addresses directly to the internet.
+- **The security group becomes the only inbound barrier.** Private subnets give
+  a structural "no inbound from the internet" guarantee that does not depend on
+  security group correctness. In `public` placement a single loosened rule in
+  the node security group exposes a Firecracker host directly. The shipped rules
+  allow only the Traefik port from the ALB security group and intra-VPC traffic.
+- **Egress addresses are not stable.** NAT gateways have fixed Elastic IPs that
+  can be allowlisted by external services. Public node addresses change on every
+  instance replacement.
+- **Cost crossover.** Public IPv4 charges scale with `node_count` while NAT
+  gateway hours are flat. `public` stops being the cheaper option somewhere in
+  the high teens of nodes.
+
+Use `node_network_placement = "private"` for anything beyond a demo.
+
+### NAT gateway topology
+
+When placement is `private`, `nat_gateway_mode` controls the topology:
+
+- `per_az` (default) — one gateway per AZ. Node egress survives a single-AZ
+  failure.
+- `single` — one gateway for all private subnets. Cheaper, but introduces an AZ
+  dependency and cross-AZ data charges for non-S3 egress from the other zones.
+
+Collapsing to a single AZ entirely is not available: the ALB requires at least
+two availability zones.
+
+### S3 gateway endpoint
+
+An S3 gateway VPC endpoint is created in both placements and associated with the
+public and private route tables. Gateway endpoints have no hourly charge.
+
+It carries the rootfs image sync, S3 configuration polling, and `dnf` traffic
+during bootstrap, since Amazon Linux package repositories are served from
+regional S3. In `private` placement this removes that traffic from NAT data
+processing charges; in `public` placement it keeps the traffic on the AWS
+network rather than saving money.
+
+**Gateway endpoints only serve buckets in the same region as this VPC.** The
+images and configs buckets come from the control-plane stack, which has its own
+region variable. A split-region deployment silently bypasses the endpoint with
+no error and no failure — traffic just keeps taking the public path.
+
+To verify the endpoint is carrying traffic in `private` placement, watch the NAT
+gateway `BytesOutToDestination` CloudWatch metric during a node launch. It
+should stay near flat instead of spiking by the size of the rootfs image set. In
+`public` placement there is no NAT metric to watch; confirm instead that the S3
+prefix-list route is present on the route table serving the node subnets.
+
+### Node instance type and architecture
+
+`node_instance_type` defaults to `c7i.2xlarge` with
+`node_nested_virtualization = true`.
+
+Firecracker needs `/dev/kvm`. Until AWS added nested virtualization on virtual
+instances, that meant bare metal — and the smallest available Graviton metal SKU
+is 64 vCPU, so the demo had to buy 64 vCPU regardless of what it actually ran.
+Nested virtualization removes that floor: the node can be sized to the workload.
+The saving is roughly six times on instance hours, which dominates the bill for
+this stack.
+
+Nested virtualization is supported on Intel families only — C8i, M8i, R8i and
+their `id`/`flex` variants, X8i, C7i, M7i, R7i, C7i-flex, M7i-flex, I7i. It is
+not supported on Graviton. AWS recommends bare metal for hardware-virtualization
+workloads that are performance sensitive or have strict latency requirements, so
+**do not use this stack to benchmark microVM boot latency.**
+
+To go back to bare-metal Graviton nodes, three settings must change together,
+plus the AMI and the image bucket:
+
+```hcl
+node_instance_type         = "c6g.metal"
+node_nested_virtualization = false   # metal exposes /dev/kvm natively
+node_ami_architecture      = "arm64"
+```
+
+and rebuild the AMI with `architecture = "arm64"` (see
+[packer/aws/README.md](../../../packer/aws/README.md)) and point
+`s3_images_bucket_id` at the arm64 rootfs bucket. Host and guest architecture
+must match; a mismatch fails at microVM start, not at deploy time.
+
+This stack requires AWS provider `~> 6.33`, because
+`cpu_options.nested_virtualization` on `aws_launch_template` was added there.
+
 ### Node bootstrap network readiness
 
-Instances can start while NAT gateways and private-subnet routes are still
-converging. The ASG waits for private route-table associations, and node
-user-data additionally waits for the regional EC2 endpoint before doing
-metadata or storage setup. It then retries AWS API, S3, Secrets Manager,
+Instances can start while egress routes, NAT gateways, and the S3 endpoint are
+still converging. The ASG waits for route-table associations and the S3 gateway
+endpoint, and node user-data additionally waits for the regional EC2 endpoint
+before doing metadata or storage setup. It then retries AWS API, S3, Secrets Manager,
 package, and step-ca calls with bounded exponential backoff. This keeps a
 transient network timeout from making cloud-init's one-shot bootstrap fail
 permanently. The launch template gzip-compresses user-data before base64
@@ -73,7 +183,7 @@ Node AMI is resolved in this priority order:
 Notes:
 
 - For `node_ami_name_pattern`, you can pass a partial name (for example `firework-node`); Terraform automatically searches as `*firework-node*`.
-- Pattern lookup uses owners from `node_ami_owners` (default `["self"]`) and architecture `node_ami_architecture` (default `arm64`).
+- Pattern lookup uses owners from `node_ami_owners` (default `["self"]`) and architecture `node_ami_architecture` (default `x86_64`).
 
 ## Node certificate bootstrap modes
 
@@ -113,7 +223,7 @@ This stack now provisions basic runtime observability:
 
 ## Debugging
 
-Nodes live in private subnets. All access goes through AWS Systems Manager Session Manager — no SSH, no bastion.
+Whatever `node_network_placement` is set to, all node access goes through AWS Systems Manager Session Manager — no SSH, no bastion.
 
 ### Connect to a node
 
@@ -204,7 +314,7 @@ From `firework-deployment-example/`, deploy a local binary to an existing node v
 ```bash
 ./scripts/push-agent-to-node.sh \
   --instance-id <instance-id> \
-  --agent-path ../firework/bin/firework-agent-linux-arm64 \
+  --agent-path ../firework/bin/firework-agent-linux-amd64 \
   --ssh-key ~/.ssh/<your-key>.pem \
   --region us-east-1
 ```
@@ -244,7 +354,7 @@ Both storage backends are disabled by default:
   for recovery. ASG replacement leaves the old disk detached and the old
   node binding pending; it is never auto-attached to a replacement instance.
 - `enable_shared_storage=true` creates encrypted Regional EFS, one mount target
-  per private subnet, a node-only NFS security group, and an optional access
+  per node subnet, a node-only NFS security group, and an optional access
   point. Nodes mount it with TLS before the agent starts and verify a stable
   backend marker. Shared application placement remains safety-gated in
   Firework until durable per-VM fencing is available.

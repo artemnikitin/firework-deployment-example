@@ -51,11 +51,13 @@ resource "aws_security_group" "efs" {
   tags = { Name = "${var.project_name}-efs-sg" }
 }
 
+# Mount targets must follow node_network_placement, otherwise nodes in public
+# subnets have no mount target in their own availability zone.
 resource "aws_efs_mount_target" "shared" {
-  count = var.enable_shared_storage ? length(aws_subnet.private) : 0
+  count = var.enable_shared_storage ? length(local.node_subnet_ids) : 0
 
   file_system_id  = aws_efs_file_system.shared[0].id
-  subnet_id       = aws_subnet.private[count.index].id
+  subnet_id       = local.node_subnet_ids[count.index]
   security_groups = [aws_security_group.efs[0].id]
 }
 

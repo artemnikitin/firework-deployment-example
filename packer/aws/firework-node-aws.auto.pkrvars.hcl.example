@@ -1,7 +1,8 @@
 # Copy this file to firework-node-aws.auto.pkrvars.hcl and adjust as needed.
 
 aws_region          = "us-east-1"
-instance_type       = "t4g.large"   # any ARM64 instance works — metal is only needed at runtime
+architecture        = "x86_64"      # or "arm64" for bare-metal Graviton nodes
+instance_type       = "t3.large"    # any instance of the target arch works; use t4g.large for arm64
 firecracker_version = "1.12.0"
 traefik_version     = "3.3.4"
 
@@ -15,9 +16,9 @@ traefik_version     = "3.3.4"
 # aws_poll_delay_seconds = 15
 # aws_poll_max_attempts  = 240   # ~60 min, useful for metal builders
 
-# Option A: Upload a locally built agent binary (ARM64).
-# Build with: cd firework && GOARCH=arm64 make build
-# firework_agent_path = "../firework/bin/firework-agent"
+# Option A: Upload a locally built agent binary matching architecture.
+# Build with: cd firework && make build-linux-amd64   (or build-linux-arm64)
+# firework_agent_path = "../firework/bin/firework-agent-linux-amd64"
 
 # Option B: Download from GitHub releases (default).
 firework_agent_version = "latest"
