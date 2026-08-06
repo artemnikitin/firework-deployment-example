@@ -23,7 +23,7 @@ variable "architecture" {
 
   validation {
     condition     = contains(["x86_64", "arm64"], var.architecture)
-    error_message = "architecture must be either x86_64 or arm64."
+    error_message = "The architecture variable must be either x86_64 or arm64."
   }
 }
 
