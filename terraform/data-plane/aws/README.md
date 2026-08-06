@@ -107,7 +107,7 @@ prefix-list route is present on the route table serving the node subnets.
 
 ### Node instance type and architecture
 
-`node_instance_type` defaults to `c7i.2xlarge` with
+`node_instance_type` defaults to `c8i.2xlarge` with
 `node_nested_virtualization = true`.
 
 Firecracker needs `/dev/kvm`. Until AWS added nested virtualization on virtual
@@ -119,9 +119,33 @@ this stack.
 
 Nested virtualization is supported on Intel families only — C8i, M8i, R8i and
 their `id`/`flex` variants, X8i, C7i, M7i, R7i, C7i-flex, M7i-flex, I7i. It is
-not supported on Graviton. AWS recommends bare metal for hardware-virtualization
-workloads that are performance sensitive or have strict latency requirements, so
-**do not use this stack to benchmark microVM boot latency.**
+not supported on Graviton.
+
+The default is an 8th-generation type deliberately. The AWS user guide lists
+both 7th and 8th generation, but the Terraform provider documentation for
+`cpu_options.nested_virtualization` describes 8th generation "only". The AWS
+guide governs what the API accepts, so 7th-generation types should work — but
+defaulting to 8th generation means the configuration does not depend on which
+document is stale. Verify with `aws ec2 run-instances --dry-run --cpu-options`
+before switching to a 7th-generation type.
+
+Avoid the `flex` variants for nodes. They are designed for workloads that do not
+sustain high CPU, which is the opposite of a Firecracker host.
+
+Newer instance families are offered in fewer availability zones. If you pin
+`availability_zones`, confirm the chosen type is actually offered in all of them:
+
+```bash
+aws ec2 describe-instance-type-offerings \
+  --location-type availability-zone \
+  --filters Name=instance-type,Values=c8i.2xlarge \
+  --region us-east-1 \
+  --query 'InstanceTypeOfferings[].Location' --output text
+```
+
+AWS recommends bare metal for hardware-virtualization workloads that are
+performance sensitive or have strict latency requirements, so **do not use this
+stack to benchmark microVM boot latency.**
 
 To go back to bare-metal Graviton nodes, three settings must change together,
 plus the AMI and the image bucket:

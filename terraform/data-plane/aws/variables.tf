@@ -169,7 +169,7 @@ variable "node_instance_type" {
     roughly six times more per hour for this demo.
   EOT
   type        = string
-  default     = "c7i.2xlarge"
+  default     = "c8i.2xlarge"
 }
 
 variable "node_nested_virtualization" {

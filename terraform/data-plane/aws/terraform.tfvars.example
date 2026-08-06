@@ -75,9 +75,9 @@ node_key_name = "my-key-pair"
 
 # Instance type must expose /dev/kvm for Firecracker: either a bare-metal type,
 # or a virtual Intel type with node_nested_virtualization = true.
-# c7i.2xlarge = Intel, 8 vCPUs, 16 GB RAM — roughly 6x cheaper per hour than the
+# c8i.2xlarge = Intel, 8 vCPUs, 16 GB RAM — roughly 6x cheaper per hour than the
 # smallest Graviton metal SKU, which is 64 vCPUs whether you need them or not.
-node_instance_type         = "c7i.2xlarge"
+node_instance_type         = "c8i.2xlarge"
 node_nested_virtualization = true
 
 # To use bare-metal Graviton nodes instead, all three must change together, and

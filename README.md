@@ -35,7 +35,7 @@ flowchart LR
     end
 
     subgraph Nodes["Node subnet (public by default)"]
-      Node["c7i.2xlarge node<br/>firework-agent + Traefik"]
+      Node["c8i.2xlarge node<br/>firework-agent + Traefik"]
       VM1["tenant-1-kibana VM :5611"]
       VM2["tenant-1-elasticsearch VM :9200"]
       VM3["tenant-2-kibana VM :5612"]
