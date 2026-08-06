@@ -65,11 +65,17 @@ resource "aws_internet_gateway" "main" {
 # for cost-sensitive deployments, at the cost of an AZ dependency and cross-AZ
 # data charges for non-S3 egress from the other zones.
 
+locals {
+  # In "single" mode one gateway serves every AZ, so an AZ suffix would name a
+  # zone the gateway is not specific to.
+  nat_name_suffixes = var.nat_gateway_mode == "single" ? ["shared"] : var.availability_zones
+}
+
 resource "aws_eip" "nat" {
   count  = local.nat_count
   domain = "vpc"
 
-  tags = { Name = "${var.project_name}-nat-eip-${var.availability_zones[count.index]}" }
+  tags = { Name = "${var.project_name}-nat-eip-${local.nat_name_suffixes[count.index]}" }
 }
 
 resource "aws_nat_gateway" "main" {
@@ -78,7 +84,7 @@ resource "aws_nat_gateway" "main" {
   allocation_id = aws_eip.nat[count.index].id
   subnet_id     = aws_subnet.public[count.index].id
 
-  tags = { Name = "${var.project_name}-nat-${var.availability_zones[count.index]}" }
+  tags = { Name = "${var.project_name}-nat-${local.nat_name_suffixes[count.index]}" }
 
   depends_on = [aws_internet_gateway.main]
 }

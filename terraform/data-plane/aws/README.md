@@ -137,6 +137,12 @@ and rebuild the AMI with `architecture = "arm64"` (see
 `s3_images_bucket_id` at the arm64 rootfs bucket. Host and guest architecture
 must match; a mismatch fails at microVM start, not at deploy time.
 
+**Delete or rebuild `packer/aws/manifest.json` when switching architecture.**
+`use_packer_manifest_ami` defaults to `true`, so a stale manifest left over from
+a previous build resolves an AMI of the old architecture into an instance type
+of the new one. That fails at instance launch with an unhelpful error rather
+than at plan time.
+
 This stack requires AWS provider `~> 6.33`, because
 `cpu_options.nested_virtualization` on `aws_launch_template` was added there.
 

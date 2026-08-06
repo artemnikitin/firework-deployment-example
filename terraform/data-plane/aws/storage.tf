@@ -53,8 +53,12 @@ resource "aws_security_group" "efs" {
 
 # Mount targets must follow node_network_placement, otherwise nodes in public
 # subnets have no mount target in their own availability zone.
+#
+# count is derived from var.availability_zones rather than length() of the
+# subnet-ID splat: the latter depends on resource attributes and is not
+# guaranteed to be known at plan time on a first apply.
 resource "aws_efs_mount_target" "shared" {
-  count = var.enable_shared_storage ? length(local.node_subnet_ids) : 0
+  count = var.enable_shared_storage ? length(var.availability_zones) : 0
 
   file_system_id  = aws_efs_file_system.shared[0].id
   subnet_id       = local.node_subnet_ids[count.index]
