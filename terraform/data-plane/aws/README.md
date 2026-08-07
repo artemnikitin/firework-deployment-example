@@ -83,6 +83,38 @@ When placement is `private`, `nat_gateway_mode` controls the topology:
 Collapsing to a single AZ entirely is not available: the ALB requires at least
 two availability zones.
 
+### Changing availability zones
+
+`availability_zones` accepts any number of zones from two upwards, in any order,
+and the list can be edited later.
+
+Subnets are keyed by availability zone, and each zone's CIDR is derived from the
+trailing zone letter rather than from the zone's position in the list:
+
+| Zone | Public | Private |
+| --- | --- | --- |
+| `<region>a` | `10.0.0.0/24` | `10.0.100.0/24` |
+| `<region>b` | `10.0.1.0/24` | `10.0.101.0/24` |
+| `<region>c` | `10.0.2.0/24` | `10.0.102.0/24` |
+
+So adding or removing a zone only creates or destroys that zone's subnets and
+leaves every other zone untouched. Reordering the list changes nothing at all.
+
+The zone count is independent of `node_count`. The Auto Scaling Group spreads
+however many nodes you ask for across whatever zones exist; you can run one node
+across four zones, or four nodes across two.
+
+**Two zones is the minimum**, enforced by a variable validation. This is an AWS
+constraint rather than a limitation of this stack: an Application Load Balancer
+requires subnets in at least two availability zones, and the ALB lives in these
+subnets. A single-zone deployment would need the ALB to be given its own
+subnets, separate from the node subnets.
+
+Zone names must be of the standard `<region><letter>` form with a letter in
+`a`-`h`. Local Zone and Wavelength names such as `us-east-1-bos-1a` are rejected,
+because their trailing letter would collide with the ordinary zone of the same
+letter.
+
 ### S3 gateway endpoint
 
 An S3 gateway VPC endpoint is created in both placements and associated with the
@@ -207,6 +239,30 @@ them one at a time when you are ready, and expect nodes to be replaced.
 
 Switching architecture additionally requires rebuilding the AMI and repointing
 `s3_images_bucket_id` at a matching rootfs image set, as described above.
+
+#### Subnet keys changed from index to availability zone
+
+Subnets, private route tables, and route-table associations moved from
+positional `count` addresses to `for_each` keyed by availability zone. On an
+already-applied stack the state addresses must be moved, for example:
+
+```bash
+terraform state mv 'aws_subnet.public[0]'  'aws_subnet.public["us-east-1a"]'
+terraform state mv 'aws_subnet.private[0]' 'aws_subnet.private["us-east-1a"]'
+# ... and the same for aws_route_table.private and both
+#     aws_route_table_association resources
+```
+
+**Moving the state is not sufficient on its own.** CIDRs are now derived from
+the zone letter, so any zone whose letter position differs from its old list
+index also changes CIDR, and a CIDR change replaces the subnet. For a stack
+originally applied with `["us-east-1a", "us-east-1c"]`, zone `a` keeps
+`10.0.0.0/24` and is untouched, while zone `c` moves from `10.0.1.0/24` to
+`10.0.2.0/24` and is replaced along with anything in it.
+
+Because this is a one-time renumbering, the simplest path is to apply this
+change to a destroyed stack. If the stack must stay up, expect the state moves
+*plus* replacement of the subnets whose CIDR shifts.
 
 ### Node bootstrap network readiness
 

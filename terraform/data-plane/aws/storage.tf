@@ -54,14 +54,13 @@ resource "aws_security_group" "efs" {
 # Mount targets must follow node_network_placement, otherwise nodes in public
 # subnets have no mount target in their own availability zone.
 #
-# count is derived from var.availability_zones rather than length() of the
-# subnet-ID splat: the latter depends on resource attributes and is not
-# guaranteed to be known at plan time on a first apply.
+# Keyed by availability zone from the variable, so the keys are known at plan
+# time and removing one AZ does not disturb the mount targets of the others.
 resource "aws_efs_mount_target" "shared" {
-  count = var.enable_shared_storage ? length(var.availability_zones) : 0
+  for_each = var.enable_shared_storage ? toset(var.availability_zones) : toset([])
 
   file_system_id  = aws_efs_file_system.shared[0].id
-  subnet_id       = local.node_subnet_ids[count.index]
+  subnet_id       = local.node_subnets_are_public ? aws_subnet.public[each.key].id : aws_subnet.private[each.key].id
   security_groups = [aws_security_group.efs[0].id]
 }
 
