@@ -170,6 +170,44 @@ than at plan time.
 This stack requires AWS provider `~> 6.33`, because
 `cpu_options.nested_virtualization` on `aws_launch_template` was added there.
 
+### Upgrading an existing deployment
+
+The defaults in this stack changed: nodes moved from private subnets behind NAT
+to public subnets, and from bare-metal Graviton to x86_64 with nested
+virtualization. **An existing deployment on the old defaults must not simply
+`apply` the new ones.**
+
+The hazard is specific. Changing `vpc_zone_identifier` on an Auto Scaling Group
+updates the group, but AWS does not reconfigure instances that are already
+running. In the same apply, the NAT gateways and the private-subnet default
+routes are deleted. Without an instance refresh, the already-running nodes stay
+in the private subnets with no route to the internet and lose S3, EC2, Secrets
+Manager, and registry access.
+
+The ASG now sets `instance_refresh`, and pins `launch_template.version` to the
+concrete `latest_version` rather than `$Latest`, because a refresh does not
+start when the group references `$Latest`. Any launch-template change therefore
+rolls the nodes. Note the refresh is asynchronous: AWS starts it, Terraform does
+not block until it finishes, so old instances can briefly lose egress while
+being replaced.
+
+**The safe upgrade path is to pin the old behaviour first**, apply, and migrate
+deliberately afterwards:
+
+```hcl
+node_network_placement     = "private"
+nat_gateway_mode           = "per_az"
+node_instance_type         = "c6g.metal"
+node_nested_virtualization = false
+node_ami_architecture      = "arm64"
+```
+
+That reproduces the previous topology exactly, so the upgrade is a no-op. Change
+them one at a time when you are ready, and expect nodes to be replaced.
+
+Switching architecture additionally requires rebuilding the AMI and repointing
+`s3_images_bucket_id` at a matching rootfs image set, as described above.
+
 ### Node bootstrap network readiness
 
 Instances can start while egress routes, NAT gateways, and the S3 endpoint are

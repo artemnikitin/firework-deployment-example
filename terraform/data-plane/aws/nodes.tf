@@ -140,9 +140,28 @@ resource "aws_autoscaling_group" "nodes" {
     delete = "30m"
   }
 
+  # Pinned to the concrete latest version rather than "$Latest": an instance
+  # refresh does not start when the ASG references "$Latest", so launch-template
+  # changes would silently never reach running instances.
   launch_template {
     id      = aws_launch_template.node.id
-    version = "$Latest"
+    version = aws_launch_template.node.latest_version
+  }
+
+  # Without this, changing node_network_placement, node_instance_type, or the
+  # AMI updates the launch template but leaves running instances untouched.
+  # That is dangerous for the private -> public migration in particular: the
+  # NAT gateways and private default routes are removed in the same apply, so
+  # un-refreshed instances would keep their private subnet and lose egress.
+  instance_refresh {
+    strategy = "Rolling"
+
+    preferences {
+      # node_count defaults to 1, so a rolling refresh has to be allowed to
+      # take the only instance out of service.
+      min_healthy_percentage = 0
+      instance_warmup        = 600
+    }
   }
 
   tag {
