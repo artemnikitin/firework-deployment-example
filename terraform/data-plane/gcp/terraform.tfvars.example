@@ -21,6 +21,9 @@ images_bucket_name = "firework-images-amd64-my-gcp-project"
 
 node_machine_type = "n4-standard-8"
 node_count        = 3
+# Optional. Any two or more distinct zones of gcp_region, in any order.
+# Omit to use every zone the region reports as UP. Pinned here to avoid the
+# exhausted us-central1-c pool.
 node_zones = [
   "us-central1-a",
   "us-central1-b",

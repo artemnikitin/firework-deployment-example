@@ -7,11 +7,15 @@ locals {
   node_machine_series = split("-", var.node_machine_type)[0]
   node_uses_hyperdisk = contains(["c4", "n4"], local.node_machine_series)
   node_requires_gvnic = contains(["c3", "c4", "n4"], local.node_machine_series)
-  effective_node_zones = var.node_zones == null ? [
-    "${var.gcp_region}-a",
-    "${var.gcp_region}-b",
-    "${var.gcp_region}-c",
-  ] : var.node_zones
+  # Discovered rather than assumed: not every region has a "-a" zone. us-east1
+  # and europe-west1, for example, start at "-b", so a hardcoded
+  # <region>-a/-b/-c default fails outright in those regions.
+  effective_node_zones = var.node_zones == null ? sort(data.google_compute_zones.available.names) : var.node_zones
+}
+
+data "google_compute_zones" "available" {
+  region = var.gcp_region
+  status = "UP"
 }
 
 resource "google_compute_instance_template" "node" {
@@ -167,12 +171,12 @@ resource "google_compute_region_instance_group_manager" "nodes" {
   update_policy {
     type           = "PROACTIVE"
     minimal_action = "REPLACE"
-    # A regional MIG updates proportionally across all selected zones. Fixed
-    # values must therefore be zero or at least the three-zone distribution.
-    # Keep all current nodes available while one replacement is created per
-    # zone.
-    max_surge_fixed              = var.enable_local_storage ? 0 : 3
-    max_unavailable_fixed        = var.enable_local_storage ? 3 : 0
+    # A regional MIG updates proportionally across all selected zones, so a
+    # fixed value must be either zero or at least one per zone. Derived from
+    # the zone count rather than hardcoded to 3, so the zone list can change
+    # without silently violating that rule.
+    max_surge_fixed              = var.enable_local_storage ? 0 : length(local.effective_node_zones)
+    max_unavailable_fixed        = var.enable_local_storage ? length(local.effective_node_zones) : 0
     replacement_method           = var.enable_local_storage ? "RECREATE" : "SUBSTITUTE"
     instance_redistribution_type = var.enable_local_storage ? "NONE" : "PROACTIVE"
   }
