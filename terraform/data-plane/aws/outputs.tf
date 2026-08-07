@@ -131,5 +131,11 @@ output "s3_vpc_endpoint_id" {
 
 output "nat_gateway_ids" {
   description = "NAT gateway IDs. Empty in public node placement, where no NAT gateways are created."
-  value       = aws_nat_gateway.main[*].id
+  # A for expression rather than a [*] splat. In public placement the NAT
+  # gateway count is zero and nothing is in state, and Terraform then evaluates
+  # the resource as an object rather than an empty list. The splat wraps that
+  # object in a single-element list and fails with "This object does not have
+  # an attribute named id" during destroy. A for expression handles the empty
+  # case correctly.
+  value = [for gateway in aws_nat_gateway.main : gateway.id]
 }
