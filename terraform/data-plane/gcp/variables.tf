@@ -209,7 +209,7 @@ variable "config_prefix" {
 
 variable "images_bucket_name" {
   type        = string
-  description = "Globally unique amd64 images bucket name (created by the images-infra stack)"
+  description = "Globally unique images bucket name (created by the images-infra stack). Holds every architecture under an <arch>/ key prefix."
 }
 
 variable "registry_url" {

@@ -1,7 +1,9 @@
 # CI image uploader
 
 Grant the GitHub Actions service account `roles/storage.objectAdmin` on the
-amd64 images bucket only. Do not grant the role at project level.
+images bucket only. Do not grant the role at project level. One bucket holds
+every architecture under an `<arch>/` key prefix, so a single bucket-scoped
+binding covers all of them.
 
 Use Workload Identity Federation and grant the repository principal
 `roles/iam.workloadIdentityUser` on that service account. No JSON service
@@ -12,7 +14,7 @@ account key is required.
 Bucket-level upload access (note: bucket-scoped, not project-scoped):
 
 ```bash
-gcloud storage buckets add-iam-policy-binding gs://AMD64_IMAGES_BUCKET \
+gcloud storage buckets add-iam-policy-binding gs://IMAGES_BUCKET \
   --member="serviceAccount:CI_SA@PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/storage.objectAdmin"
 ```
@@ -28,7 +30,7 @@ gcloud iam service-accounts add-iam-policy-binding \
 
 ## Granting via Console
 
-- Bucket access: **Cloud Storage → Buckets →** select the amd64 images bucket
+- Bucket access: **Cloud Storage → Buckets →** select the images bucket
   **→ Permissions → Grant access**, add the CI service account, role
   **Storage Object Admin**.
 - WIF binding: **IAM & Admin → Service Accounts →** select the CI service
