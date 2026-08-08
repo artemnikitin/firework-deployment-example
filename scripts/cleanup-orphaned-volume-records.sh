@@ -156,28 +156,50 @@ if [[ "$provider" == "aws" ]]; then
     aws_args+=(--profile "$profile")
   fi
 
-  while IFS= read -r key; do
-    [[ -z "$key" || "$key" == "None" ]] && continue
-    content=$(aws "${aws_args[@]}" s3 cp "s3://${bucket}/${key}" - --only-show-errors)
-    inspect_record "$key" "$content"
-  done < <(
+  # Capture before reading: a process substitution's failure is invisible to
+  # `set -e`, so an API error would silently become "no orphaned records found".
+  if ! key_output=$(
     aws "${aws_args[@]}" s3api list-objects-v2 \
       --bucket "$bucket" \
       --prefix "$records_prefix" \
       --query 'Contents[].Key' \
-      --output text | tr '\t' '\n'
-  )
+      --output text
+  ); then
+    echo "ERROR: could not list s3://${bucket}/${records_prefix}. Refusing to report 'none found' from a failed lookup." >&2
+    exit 1
+  fi
+
+  while IFS= read -r key; do
+    [[ -z "$key" || "$key" == "None" ]] && continue
+    content=$(aws "${aws_args[@]}" s3 cp "s3://${bucket}/${key}" - --only-show-errors)
+    inspect_record "$key" "$content"
+  done < <(printf '%s\n' "$key_output" | tr '\t' '\n')
 else
   command -v gcloud >/dev/null 2>&1 || {
     echo "ERROR: gcloud CLI is required" >&2
     exit 1
   }
 
+  # `gcloud storage ls` exits non-zero both when nothing matches and when the
+  # lookup genuinely fails, so the two must be told apart. Swallowing every
+  # failure would report "no orphaned records found" after an auth or
+  # permission error.
+  uri_output=""
+  if ! uri_output=$(gcloud storage ls "gs://${bucket}/${records_prefix}**" --project "$project" 2>&1); then
+    if grep -qiE "matched no objects|did not match any" <<<"$uri_output"; then
+      uri_output=""
+    else
+      echo "ERROR: could not list gs://${bucket}/${records_prefix}. Refusing to report 'none found' from a failed lookup." >&2
+      printf '%s\n' "$uri_output" >&2
+      exit 1
+    fi
+  fi
+
   while IFS= read -r uri; do
     [[ -z "$uri" ]] && continue
     content=$(gcloud storage cat "$uri" --project "$project")
     inspect_record "$uri" "$content"
-  done < <(gcloud storage ls "gs://${bucket}/${records_prefix}**" --project "$project" 2>/dev/null || true)
+  done < <(printf '%s\n' "$uri_output")
 fi
 
 if ((${#orphan_records[@]} == 0)); then
