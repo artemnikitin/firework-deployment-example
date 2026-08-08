@@ -96,6 +96,45 @@ locals {
     }
   })
 
+  all_config = yamlencode({
+    role                 = "all"
+    events_listen_addr   = ":${var.events_port}"
+    registry_listen_addr = ":${var.registry_port}"
+    api_listen_addr      = ":${var.api_port}"
+    ingress_domain       = var.service_ingress_domain
+    state = {
+      backend = "gcs"
+      prefix  = var.state_prefix
+      gcs = {
+        bucket  = google_storage_bucket.state.name
+        project = var.gcp_project
+      }
+    }
+    leader_lease_ttl           = var.leader_lease_ttl
+    leader_renew_interval      = var.leader_renew_interval
+    node_stale_ttl             = var.node_stale_ttl
+    controller_tick            = var.controller_tick
+    target_branch              = var.target_branch
+    config_dir                 = var.config_dir
+    git_repo_url               = var.git_repo_url
+    reconcile_on_start         = var.reconcile_on_start
+    github_webhook_secret_file = "${local.secrets_mount}/secrets/webhook-secret"
+    operator_token_file        = "${local.secrets_mount}/secrets/operator-token"
+    tls = {
+      cert_file      = "${local.secrets_mount}/tls/server.crt"
+      key_file       = "${local.secrets_mount}/tls/server.key"
+      client_ca_file = "${local.secrets_mount}/tls/enrollment-ca.crt"
+    }
+    enrollment = {
+      ca_file       = "${local.secrets_mount}/tls/enrollment-ca.crt"
+      ca_key_file   = "${local.secrets_mount}/tls/enrollment-ca.key"
+      node_cert_ttl = var.registry_node_cert_ttl
+      bootstrap_tokens = [{
+        token_file = "${local.secrets_mount}/secrets/bootstrap-token"
+      }]
+    }
+  })
+
   events_csi_secrets = concat([
     {
       resourceName = "projects/${var.gcp_project}/secrets/${local.effective_webhook_secret_id}/versions/latest"
@@ -151,6 +190,40 @@ locals {
       path         = "secrets/operator-token"
     },
   ]
+
+  all_csi_secrets = concat([
+    {
+      resourceName = "projects/${var.gcp_project}/secrets/${local.effective_webhook_secret_id}/versions/latest"
+      path         = "secrets/webhook-secret"
+    },
+    {
+      resourceName = "projects/${var.gcp_project}/secrets/${local.effective_events_tls_cert_secret_id}/versions/latest"
+      path         = "tls/server.crt"
+    },
+    {
+      resourceName = "projects/${var.gcp_project}/secrets/${local.effective_events_tls_key_secret_id}/versions/latest"
+      path         = "tls/server.key"
+    },
+    {
+      resourceName = "projects/${var.gcp_project}/secrets/${local.effective_enrollment_ca_cert_secret_id}/versions/latest"
+      path         = "tls/enrollment-ca.crt"
+    },
+    {
+      resourceName = "projects/${var.gcp_project}/secrets/${local.effective_enrollment_ca_key_secret_id}/versions/latest"
+      path         = "tls/enrollment-ca.key"
+    },
+    {
+      resourceName = "projects/${var.gcp_project}/secrets/${local.effective_bootstrap_token_secret_id}/versions/latest"
+      path         = "secrets/bootstrap-token"
+    },
+    {
+      resourceName = "projects/${var.gcp_project}/secrets/${local.effective_operator_token_secret_id}/versions/latest"
+      path         = "secrets/operator-token"
+    },
+    ], var.github_token_secret_id != "" ? [{
+      resourceName = "projects/${var.gcp_project}/secrets/${var.github_token_secret_id}/versions/latest"
+      path         = "secrets/github-token"
+  }] : [])
 }
 
 # ---------------------------------------------------------------------------
@@ -176,9 +249,23 @@ resource "kubernetes_service_account" "controlplane" {
   }
 }
 
+resource "kubernetes_service_account" "controlplane_all" {
+  count = var.controlplane_service_mode == "all" ? 1 : 0
+
+  metadata {
+    name      = "firework-controlplane"
+    namespace = kubernetes_namespace.firework.metadata[0].name
+    annotations = {
+      "iam.gke.io/gcp-service-account" = google_service_account.controlplane_all[0].email
+    }
+  }
+}
+
 # Secret Manager CSI volumes keep secret values out of Kubernetes Secret
 # objects and Terraform state when the operator supplies the secret material.
 resource "kubectl_manifest" "events_secret_provider_class" {
+  count = var.controlplane_service_mode == "split" ? 1 : 0
+
   yaml_body = yamlencode({
     apiVersion = "secrets-store.csi.x-k8s.io/v1"
     kind       = "SecretProviderClass"
@@ -206,6 +293,8 @@ resource "kubectl_manifest" "events_secret_provider_class" {
 }
 
 resource "kubectl_manifest" "registry_secret_provider_class" {
+  count = var.controlplane_service_mode == "split" ? 1 : 0
+
   yaml_body = yamlencode({
     apiVersion = "secrets-store.csi.x-k8s.io/v1"
     kind       = "SecretProviderClass"
@@ -231,6 +320,8 @@ resource "kubectl_manifest" "registry_secret_provider_class" {
 }
 
 resource "kubectl_manifest" "api_secret_provider_class" {
+  count = var.controlplane_service_mode == "split" ? 1 : 0
+
   yaml_body = yamlencode({
     apiVersion = "secrets-store.csi.x-k8s.io/v1"
     kind       = "SecretProviderClass"
@@ -255,11 +346,40 @@ resource "kubectl_manifest" "api_secret_provider_class" {
   ]
 }
 
+resource "kubectl_manifest" "all_secret_provider_class" {
+  count = var.controlplane_service_mode == "all" ? 1 : 0
+
+  yaml_body = yamlencode({
+    apiVersion = "secrets-store.csi.x-k8s.io/v1"
+    kind       = "SecretProviderClass"
+    metadata = {
+      name      = "firework-controlplane-secrets"
+      namespace = kubernetes_namespace.firework.metadata[0].name
+    }
+    spec = {
+      provider = "gke"
+      parameters = {
+        secrets = yamlencode(local.all_csi_secrets)
+      }
+    }
+  })
+
+  validate_schema = false
+
+  depends_on = [
+    google_container_cluster.control_plane,
+    kubernetes_namespace.firework,
+    google_secret_manager_secret_iam_member.controlplane_all_accessor,
+  ]
+}
+
 # ---------------------------------------------------------------------------
 # ConfigMaps (one per role — no secret values)
 # ---------------------------------------------------------------------------
 
 resource "kubernetes_config_map" "events" {
+  count = var.controlplane_service_mode == "split" ? 1 : 0
+
   metadata {
     name      = "firework-events-config"
     namespace = kubernetes_namespace.firework.metadata[0].name
@@ -270,6 +390,8 @@ resource "kubernetes_config_map" "events" {
 }
 
 resource "kubernetes_config_map" "registry" {
+  count = var.controlplane_service_mode == "split" ? 1 : 0
+
   metadata {
     name      = "firework-registry-config"
     namespace = kubernetes_namespace.firework.metadata[0].name
@@ -280,6 +402,8 @@ resource "kubernetes_config_map" "registry" {
 }
 
 resource "kubernetes_config_map" "controller" {
+  count = var.controlplane_service_mode == "split" ? 1 : 0
+
   metadata {
     name      = "firework-controller-config"
     namespace = kubernetes_namespace.firework.metadata[0].name
@@ -290,6 +414,8 @@ resource "kubernetes_config_map" "controller" {
 }
 
 resource "kubernetes_config_map" "api" {
+  count = var.controlplane_service_mode == "split" ? 1 : 0
+
   metadata {
     name      = "firework-api-config"
     namespace = kubernetes_namespace.firework.metadata[0].name
@@ -299,11 +425,25 @@ resource "kubernetes_config_map" "api" {
   }
 }
 
+resource "kubernetes_config_map" "all" {
+  count = var.controlplane_service_mode == "all" ? 1 : 0
+
+  metadata {
+    name      = "firework-controlplane-config"
+    namespace = kubernetes_namespace.firework.metadata[0].name
+  }
+  data = {
+    "controlplane.yaml" = local.all_config
+  }
+}
+
 # ---------------------------------------------------------------------------
 # Deployments
 # ---------------------------------------------------------------------------
 
 resource "kubernetes_deployment" "events" {
+  count = var.controlplane_service_mode == "split" ? 1 : 0
+
   metadata {
     name      = "firework-events"
     namespace = kubernetes_namespace.firework.metadata[0].name
@@ -375,7 +515,7 @@ resource "kubernetes_deployment" "events" {
         volume {
           name = "config"
           config_map {
-            name = kubernetes_config_map.events.metadata[0].name
+            name = kubernetes_config_map.events[0].metadata[0].name
           }
         }
 
@@ -412,6 +552,8 @@ resource "kubernetes_deployment" "events" {
 }
 
 resource "kubernetes_deployment" "registry" {
+  count = var.controlplane_service_mode == "split" ? 1 : 0
+
   metadata {
     name      = "firework-registry"
     namespace = kubernetes_namespace.firework.metadata[0].name
@@ -467,7 +609,7 @@ resource "kubernetes_deployment" "registry" {
         volume {
           name = "config"
           config_map {
-            name = kubernetes_config_map.registry.metadata[0].name
+            name = kubernetes_config_map.registry[0].metadata[0].name
           }
         }
 
@@ -504,6 +646,8 @@ resource "kubernetes_deployment" "registry" {
 }
 
 resource "kubernetes_deployment" "controller" {
+  count = var.controlplane_service_mode == "split" ? 1 : 0
+
   metadata {
     name      = "firework-controller"
     namespace = kubernetes_namespace.firework.metadata[0].name
@@ -548,7 +692,7 @@ resource "kubernetes_deployment" "controller" {
         volume {
           name = "config"
           config_map {
-            name = kubernetes_config_map.controller.metadata[0].name
+            name = kubernetes_config_map.controller[0].metadata[0].name
           }
         }
 
@@ -574,6 +718,8 @@ resource "kubernetes_deployment" "controller" {
 }
 
 resource "kubernetes_deployment" "api" {
+  count = var.controlplane_service_mode == "split" ? 1 : 0
+
   metadata {
     name      = "firework-api"
     namespace = kubernetes_namespace.firework.metadata[0].name
@@ -640,7 +786,7 @@ resource "kubernetes_deployment" "api" {
         volume {
           name = "config"
           config_map {
-            name = kubernetes_config_map.api.metadata[0].name
+            name = kubernetes_config_map.api[0].metadata[0].name
           }
         }
 
@@ -676,6 +822,148 @@ resource "kubernetes_deployment" "api" {
   }
 }
 
+resource "kubernetes_deployment" "all" {
+  count = var.controlplane_service_mode == "all" ? 1 : 0
+
+  metadata {
+    name      = "firework-controlplane"
+    namespace = kubernetes_namespace.firework.metadata[0].name
+    labels    = merge(local.common_labels, { role = "all" })
+  }
+  spec {
+    replicas = var.controlplane_replicas
+    selector {
+      match_labels = { role = "all" }
+    }
+    template {
+      metadata {
+        labels = merge(local.common_labels, { role = "all" })
+        annotations = {
+          "firework.artemnikitin.com/controlplane-deployment-revision" = var.controlplane_deployment_revision
+        }
+      }
+      spec {
+        service_account_name = kubernetes_service_account.controlplane_all[0].metadata[0].name
+
+        container {
+          name              = "controlplane"
+          image             = var.controlplane_image
+          image_pull_policy = "Always"
+          command           = ["/bin/sh", "-ec"]
+          args = [var.github_token_secret_id != "" ?
+            "export GITHUB_TOKEN=\"$(cat ${local.secrets_mount}/secrets/github-token)\"; exec /usr/local/bin/firework-controlplane --config ${local.config_file}" :
+            "exec /usr/local/bin/firework-controlplane --config ${local.config_file}"
+          ]
+
+          port {
+            name           = "events"
+            container_port = var.events_port
+            protocol       = "TCP"
+          }
+
+          port {
+            name           = "registry"
+            container_port = var.registry_port
+            protocol       = "TCP"
+          }
+
+          port {
+            name           = "api"
+            container_port = var.api_port
+            protocol       = "TCP"
+          }
+
+          resources {
+            requests = {
+              cpu    = var.controlplane_cpu_request
+              memory = var.controlplane_memory_request
+            }
+          }
+
+          readiness_probe {
+            http_get {
+              path   = "/healthz"
+              port   = var.events_port
+              scheme = "HTTPS"
+            }
+            initial_delay_seconds = 10
+            period_seconds        = 15
+            failure_threshold     = 3
+          }
+
+          volume_mount {
+            name       = "config"
+            mount_path = local.config_mount
+            read_only  = true
+          }
+
+          volume_mount {
+            name       = "secrets"
+            mount_path = local.secrets_mount
+            read_only  = true
+          }
+        }
+
+        volume {
+          name = "config"
+          config_map {
+            name = kubernetes_config_map.all[0].metadata[0].name
+          }
+        }
+
+        volume {
+          name = "secrets"
+          csi {
+            driver    = "secrets-store-gke.csi.k8s.io"
+            read_only = true
+            volume_attributes = {
+              secretProviderClass = "firework-controlplane-secrets"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [
+    kubectl_manifest.all_secret_provider_class,
+    google_storage_bucket_iam_member.state_object_admin_all,
+    google_service_account_iam_member.workload_identity_all,
+  ]
+
+  lifecycle {
+    ignore_changes = [
+      metadata[0].annotations["autopilot.gke.io/resource-adjustment"],
+      metadata[0].annotations["autopilot.gke.io/warden-version"],
+      spec[0].template[0].spec[0].container[0].resources[0].requests["ephemeral-storage"],
+      spec[0].template[0].spec[0].container[0].security_context,
+      spec[0].template[0].spec[0].security_context,
+      spec[0].template[0].spec[0].toleration,
+    ]
+  }
+}
+
+resource "kubernetes_pod_disruption_budget_v1" "all" {
+  # A min_available of 1 against a single replica allows zero disruptions, so
+  # every voluntary eviction is refused: drains and Autopilot node upgrades
+  # stall until GKE force-terminates the pod. Only budget when scaled out.
+  count = var.controlplane_service_mode == "all" && var.controlplane_replicas > 1 ? 1 : 0
+
+  metadata {
+    name      = "firework-controlplane"
+    namespace = kubernetes_namespace.firework.metadata[0].name
+  }
+
+  spec {
+    min_available = 1
+    selector {
+      match_labels = { role = "all" }
+    }
+  }
+
+  depends_on = [kubernetes_deployment.all]
+}
+
 # ---------------------------------------------------------------------------
 # Services and hostname-separated Gateway API routing (GKE L7 HTTPS LB)
 # ---------------------------------------------------------------------------
@@ -688,7 +976,7 @@ resource "kubernetes_service" "events" {
   }
   spec {
     type     = "ClusterIP"
-    selector = { role = "events" }
+    selector = { role = var.controlplane_service_mode == "all" ? "all" : "events" }
 
     port {
       name         = "https"
@@ -715,7 +1003,7 @@ resource "kubernetes_service" "api" {
   }
   spec {
     type     = "ClusterIP"
-    selector = { role = "api" }
+    selector = { role = var.controlplane_service_mode == "all" ? "all" : "api" }
 
     port {
       name         = "https"
@@ -938,14 +1226,15 @@ resource "kubernetes_service" "registry" {
     namespace = kubernetes_namespace.firework.metadata[0].name
     labels    = merge(local.common_labels, { role = "registry" })
     annotations = {
-      "networking.gke.io/load-balancer-type" = "External"
+      "networking.gke.io/load-balancer-type"                         = "Internal"
+      "networking.gke.io/internal-load-balancer-allow-global-access" = "true"
     }
   }
   spec {
     type                        = "LoadBalancer"
     load_balancer_ip            = google_compute_address.registry.address
     load_balancer_source_ranges = var.registry_allowed_cidrs
-    selector                    = { role = "registry" }
+    selector                    = { role = var.controlplane_service_mode == "all" ? "all" : "registry" }
 
     port {
       name        = "registry"

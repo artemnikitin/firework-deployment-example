@@ -37,6 +37,17 @@ variable "base_domain" {
 variable "network_cidr" {
   type    = string
   default = "10.30.0.0/24"
+
+  validation {
+    condition     = can(cidrhost(var.network_cidr, 0))
+    error_message = "network_cidr must be a valid IPv4 CIDR block, for example 10.30.0.0/24."
+  }
+}
+
+variable "enable_cloud_nat" {
+  type        = bool
+  default     = false
+  description = "Create Cloud NAT for node and guest-microVM internet egress. Private Google Access and control-plane peering work without it; enable only when workloads need public internet access or on-node package/debugging egress."
 }
 
 variable "node_machine_type" {
@@ -190,6 +201,12 @@ variable "control_plane_state_path" {
   type        = string
   default     = "../../control-plane/gcp/terraform.tfstate"
   description = "Path to the control-plane terraform.tfstate (absolute or relative to this module). Used when use_control_plane_remote_state is true."
+}
+
+variable "control_plane_network_self_link" {
+  type        = string
+  default     = ""
+  description = "Optional control-plane VPC self-link override. Normally auto-wired from control-plane state for VPC peering."
 }
 
 variable "config_bucket_name" {

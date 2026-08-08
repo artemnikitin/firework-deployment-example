@@ -1,5 +1,6 @@
 locals {
-  cp_log_filter = "resource.type=\"k8s_container\" AND labels.\"k8s-pod/application\":\"firework\" AND labels.\"k8s-pod/plane\":\"control\""
+  cp_log_filter          = "resource.type=\"k8s_container\" AND labels.\"k8s-pod/application\":\"firework\" AND labels.\"k8s-pod/plane\":\"control\""
+  controller_role_filter = var.controlplane_service_mode == "all" ? "labels.\"k8s-pod/role\":\"all\"" : "labels.\"k8s-pod/role\":\"controller\""
 }
 
 # Per-role error counts
@@ -22,8 +23,21 @@ resource "google_logging_metric" "control_plane_errors" {
   }
 }
 
+resource "google_logging_metric" "all_errors" {
+  count  = var.controlplane_service_mode == "all" ? 1 : 0
+  name   = "${local.name_prefix}-all-errors"
+  filter = "${local.cp_log_filter} AND labels.\"k8s-pod/role\":\"all\" AND severity>=ERROR"
+
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+    unit        = "1"
+  }
+}
+
 # events role errors
 resource "google_logging_metric" "events_errors" {
+  count  = var.controlplane_service_mode == "split" ? 1 : 0
   name   = "${local.name_prefix}-events-errors"
   filter = "${local.cp_log_filter} AND labels.\"k8s-pod/role\":\"events\" AND severity>=ERROR"
 
@@ -36,6 +50,7 @@ resource "google_logging_metric" "events_errors" {
 
 # registry role errors
 resource "google_logging_metric" "registry_errors" {
+  count  = var.controlplane_service_mode == "split" ? 1 : 0
   name   = "${local.name_prefix}-registry-errors"
   filter = "${local.cp_log_filter} AND labels.\"k8s-pod/role\":\"registry\" AND severity>=ERROR"
 
@@ -48,6 +63,7 @@ resource "google_logging_metric" "registry_errors" {
 
 # controller role errors
 resource "google_logging_metric" "controller_errors" {
+  count  = var.controlplane_service_mode == "split" ? 1 : 0
   name   = "${local.name_prefix}-controller-errors"
   filter = "${local.cp_log_filter} AND labels.\"k8s-pod/role\":\"controller\" AND severity>=ERROR"
 
@@ -80,7 +96,7 @@ resource "google_logging_metric" "container_restarts" {
 
 resource "google_logging_metric" "controller_no_nodes_discovered" {
   name   = "${local.name_prefix}-controller-no-nodes-discovered"
-  filter = "${local.cp_log_filter} AND labels.\"k8s-pod/role\":\"controller\" AND textPayload:\"no active nodes available for scheduling\""
+  filter = "${local.cp_log_filter} AND ${local.controller_role_filter} AND textPayload:\"no active nodes available for scheduling\""
 
   metric_descriptor {
     metric_kind = "DELTA"
@@ -91,7 +107,7 @@ resource "google_logging_metric" "controller_no_nodes_discovered" {
 
 resource "google_logging_metric" "controller_insufficient_capacity" {
   name   = "${local.name_prefix}-controller-insufficient-capacity"
-  filter = "${local.cp_log_filter} AND labels.\"k8s-pod/role\":\"controller\" AND textPayload:\"insufficient capacity\""
+  filter = "${local.cp_log_filter} AND ${local.controller_role_filter} AND textPayload:\"insufficient capacity\""
 
   metric_descriptor {
     metric_kind = "DELTA"
@@ -102,7 +118,7 @@ resource "google_logging_metric" "controller_insufficient_capacity" {
 
 resource "google_logging_metric" "controller_placement_read_failed" {
   name   = "${local.name_prefix}-controller-placement-read-failed"
-  filter = "${local.cp_log_filter} AND labels.\"k8s-pod/role\":\"controller\" AND textPayload:\"placement read failed\""
+  filter = "${local.cp_log_filter} AND ${local.controller_role_filter} AND textPayload:\"placement read failed\""
 
   metric_descriptor {
     metric_kind = "DELTA"

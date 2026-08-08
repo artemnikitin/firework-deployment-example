@@ -19,7 +19,8 @@ service_ingress_domain = "gcp.example.com"
 state_bucket_name  = "firework-cp-state-my-gcp-project"
 controlplane_image = "ghcr.io/artemnikitin/firework-controlplane:dev"
 # When reusing a mutable image tag, update this to the newly published digest
-# so Terraform rolls all four GKE control-plane Deployments.
+# so Terraform rolls the combined control-plane Deployment (or all four
+# Deployments when controlplane_service_mode = "split").
 controlplane_deployment_revision = "sha256:008bc64899293f064518513e83ede46a53117e84c5410f942a9e8163a5b63c9f"
 git_repo_url       = "https://github.com/OWNER/firework-gitops-example.git"
 target_branch      = "main"
@@ -28,6 +29,18 @@ target_branch      = "main"
 # config_dir selects an optional GitOps subdirectory as the enricher input root.
 # Leave empty (the default) to consume the repository root.
 config_dir = ""
+
+# The demo runs all roles in one GKE Deployment. Set this to "split" to retain
+# separate events, registry, controller, and API Deployments with independent
+# replica counts.
+# controlplane_service_mode = "split"
+# controlplane_replicas    = 1
+# controlplane_cpu_request = "1000m"
+# controlplane_memory_request = "2Gi"
+# events_replicas    = 1
+# registry_replicas  = 1
+# controller_replicas = 1
+# api_replicas       = 1
 
 # --- Secret Manager secret IDs ---
 # Only the webhook secret must be pre-created. All TLS certs, the enrollment CA,
@@ -41,6 +54,8 @@ webhook_secret_id = "firework-webhook-secret"
 # bootstrap_token_secret_id  = "my-bootstrap-token"
 # events_tls_cert_secret_id  = "my-events-tls-cert"
 # events_tls_key_secret_id   = "my-events-tls-key"
+# Registry TLS cert/key are required in split mode and must be left unset in
+# "all" mode, where the combined pod serves the registry on the events cert:
 # registry_tls_cert_secret_id  = "my-registry-tls-cert"
 # registry_tls_key_secret_id   = "my-registry-tls-key"
 # enrollment_ca_cert_secret_id = "my-enrollment-ca-cert"

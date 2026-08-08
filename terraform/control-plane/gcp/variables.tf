@@ -104,7 +104,18 @@ variable "controlplane_image" {
 variable "controlplane_deployment_revision" {
   type        = string
   default     = ""
-  description = "Opaque revision changed to roll all GKE control-plane Deployments when controlplane_image uses a mutable tag. Set this to the published image digest."
+  description = "Opaque revision changed to roll the GKE control-plane workload when controlplane_image uses a mutable tag. Set this to the published image digest."
+}
+
+variable "controlplane_service_mode" {
+  type        = string
+  default     = "all"
+  description = "Control-plane GKE layout. 'all' runs every role in one Deployment (the demo default); 'split' preserves one Deployment per role."
+
+  validation {
+    condition     = contains(["all", "split"], var.controlplane_service_mode)
+    error_message = "controlplane_service_mode must be either \"all\" or \"split\"."
+  }
 }
 
 variable "git_repo_url" {
@@ -168,7 +179,7 @@ variable "events_port" {
 variable "registry_port" {
   type        = number
   default     = 9443
-  description = "HTTPS port for the registry role and its external load balancer."
+  description = "HTTPS port for the registry role and its internal load balancer."
 
   validation {
     condition     = var.registry_port > 0 && var.registry_port < 65536
@@ -184,6 +195,11 @@ variable "api_port" {
   validation {
     condition     = var.api_port > 0 && var.api_port < 65536
     error_message = "api_port must be a valid TCP port."
+  }
+
+  validation {
+    condition     = length(distinct([var.events_port, var.registry_port, var.api_port])) == 3
+    error_message = "events_port, registry_port, and api_port must be distinct because the combined control-plane process binds all three listeners."
   }
 }
 
@@ -215,6 +231,24 @@ variable "api_replicas" {
   type        = number
   default     = 1
   description = "Number of replicas for the read-only API Deployment."
+}
+
+variable "controlplane_replicas" {
+  type        = number
+  default     = 1
+  description = "Number of replicas for the combined all-role control-plane Deployment."
+}
+
+variable "controlplane_cpu_request" {
+  type        = string
+  default     = "1000m"
+  description = "CPU request for each replica of the combined all-role control-plane Deployment."
+}
+
+variable "controlplane_memory_request" {
+  type        = string
+  default     = "2Gi"
+  description = "Memory request for each replica of the combined all-role control-plane Deployment."
 }
 
 variable "reconcile_on_start" {
@@ -249,13 +283,13 @@ variable "auto_create_demo_secrets" {
       var.bootstrap_token_secret_id != "",
       var.events_tls_cert_secret_id != "",
       var.events_tls_key_secret_id != "",
-      var.registry_tls_cert_secret_id != "",
-      var.registry_tls_key_secret_id != "",
+      var.controlplane_service_mode == "all" ? var.registry_tls_cert_secret_id == "" : var.registry_tls_cert_secret_id != "",
+      var.controlplane_service_mode == "all" ? var.registry_tls_key_secret_id == "" : var.registry_tls_key_secret_id != "",
       var.enrollment_ca_cert_secret_id != "",
       var.enrollment_ca_key_secret_id != "",
       var.operator_token_secret_id != "",
     ])
-    error_message = "Use either fully auto-generated TLS/PKI/operator material or provide every TLS, enrollment CA, bootstrap-token, and operator-token secret ID; partial overrides are unsupported."
+    error_message = "Use either fully auto-generated TLS/PKI/operator material or provide every TLS, enrollment CA, bootstrap-token, and operator-token secret ID; partial overrides are unsupported. In \"all\" service mode the combined pod terminates registry TLS on the events certificate, so registry_tls_cert_secret_id and registry_tls_key_secret_id must be left empty in both cases."
   }
 }
 
@@ -332,6 +366,6 @@ variable "operator_token_secret_id" {
 
 variable "registry_allowed_cidrs" {
   type        = list(string)
-  default     = ["0.0.0.0/0"]
-  description = "Source CIDRs allowed to reach the registry load balancer."
+  default     = ["10.30.0.0/24"]
+  description = "Source CIDRs allowed to reach the internal registry load balancer. Keep this aligned with the data-plane network CIDR."
 }

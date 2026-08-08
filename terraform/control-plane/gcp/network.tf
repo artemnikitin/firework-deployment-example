@@ -38,8 +38,10 @@ resource "google_compute_router_nat" "control_plane" {
 }
 
 resource "google_compute_address" "registry" {
-  name   = "${local.name_prefix}-registry-ip"
-  region = var.gcp_region
+  name         = "${local.name_prefix}-registry-ip"
+  region       = var.gcp_region
+  address_type = "INTERNAL"
+  subnetwork   = google_compute_subnetwork.control_plane.id
 
   depends_on = [google_project_service.required]
 }

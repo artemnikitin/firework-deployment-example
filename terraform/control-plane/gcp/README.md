@@ -1,11 +1,14 @@
 # GCP control plane
 
-This stack deploys the Firework control-plane on **GKE Autopilot**. Four roles
-(events, registry, controller, and the read-only API/UI) run as Kubernetes
-Deployments in a regional cluster. Secrets are delivered via the Secrets Store
-CSI driver from Secret Manager. State and rendered node configs are stored in
-GCS via native ADC/Workload Identity — no HMAC keys or S3-shim. The API service
-account has `roles/storage.objectViewer`; mutating roles retain object admin.
+This stack deploys the Firework control-plane on **GKE Autopilot**. By default,
+events, registry, controller, and the read-only API/UI run as one Kubernetes
+Deployment with one shared Workload Identity service account. Set
+`controlplane_service_mode = "split"` to retain one Deployment and identity per
+role, with the existing per-role replica controls. Secrets are delivered via
+the Secrets Store CSI driver from Secret Manager. State and rendered node
+configs are stored in GCS via native ADC/Workload Identity — no HMAC keys or
+S3-shim. Split mode keeps the API service account read-only; the combined
+service deliberately uses the mutating control-plane identity for all roles.
 
 Terraform state is **local** (no remote backend). The state file lives at `terraform.tfstate` in this directory.
 
@@ -41,6 +44,12 @@ gcloud dns managed-zones create firework-gcp \
 
 Verify delegation: `dig NS gcp.example.com +short`
 
+When `base_domain` is set, the stack publishes `registry.<base_domain>` into this
+zone. The registry address is internal, so the record resolves to an RFC 1918
+address that is reachable only from the control-plane VPC and its peers — the
+name is public, the endpoint is not. Use a private zone instead if advertising
+the internal address is unacceptable.
+
 ### 3. Terraform identity permissions
 
 The principal running `apply` needs at minimum:
@@ -48,7 +57,7 @@ The principal running `apply` needs at minimum:
 | Role | Why |
 |---|---|
 | `roles/container.admin` | Create GKE Autopilot cluster |
-| `roles/compute.networkAdmin` | VPC, subnets, IPs, NAT |
+| `roles/compute.networkAdmin` | VPC, subnets, IPs, internal registry load balancer, and control-plane Cloud NAT |
 | `roles/iam.serviceAccountAdmin` | Create runtime service account |
 | `roles/iam.serviceAccountUser` | Attach the node runtime service account during the first data-plane apply |
 | `roles/serviceusage.serviceUsageAdmin` | Enable the remaining APIs from `google_project_service.required` |
@@ -79,11 +88,16 @@ echo -n "$WEBHOOK_SECRET" | gcloud secrets create firework-webhook-secret \
 Terraform will create and populate the following secrets automatically on first apply:
 - `firework-cp-enrollment-ca-cert` / `firework-cp-enrollment-ca-key` — enrollment CA
 - `firework-cp-events-tls-cert` / `firework-cp-events-tls-key` — events server TLS
-- `firework-cp-registry-tls-cert` / `firework-cp-registry-tls-key` — registry server TLS
+- `firework-cp-registry-tls-cert` / `firework-cp-registry-tls-key` — registry server TLS (split mode only)
 - `firework-cp-bootstrap-token` — node self-enrollment token
 - `firework-cp-operator-token` — read-only API/CLI/UI operator token
 
 To bring your own certs instead, set `auto_create_demo_secrets = false` and supply all `*_secret_id` variables pointing to your pre-created secrets. Partial overrides are rejected because the registry certificate and enrollment CA must stay in one trust chain.
+
+In combined mode, the events TLS certificate and key terminate all three
+listeners. Auto-generated material includes both the events hostname and the
+internal registry address; a bring-your-own events certificate must cover both
+the events hostname and `registry_server_name`.
 
 ### 5. Container image
 
@@ -105,9 +119,22 @@ controlplane_image               = "ghcr.io/artemnikitin/firework-controlplane:d
 controlplane_deployment_revision = "sha256:008bc64899293f064518513e83ede46a53117e84c5410f942a9e8163a5b63c9f"
 ```
 
-Changing `controlplane_deployment_revision` updates an annotation on every
-control-plane pod template. A normal `terraform apply` then rolls all four
-roles, and `image_pull_policy = "Always"` pulls the current image for the tag.
+Changing `controlplane_deployment_revision` updates an annotation on the
+control-plane pod template. A normal `terraform apply` then rolls the combined
+workload by default, or all four role workloads in split mode. The
+`image_pull_policy = "Always"` setting pulls the current image for the tag.
+
+The default combined Deployment requests 1000m CPU and 2Gi memory per replica
+and runs one replica, so any disruption — a node drain, an Autopilot upgrade, an
+OOM, or a node failure — takes the control plane down until the pod is
+rescheduled. A PodDisruptionBudget is created only when `controlplane_replicas`
+is above 1: budgeting a single replica would allow zero voluntary disruptions,
+which blocks drains and Autopilot maintenance without preventing the outage.
+Set `controlplane_replicas`,
+`controlplane_cpu_request`, or `controlplane_memory_request` to tune it. In
+split mode, `events_replicas`, `registry_replicas`, `controller_replicas`, and
+`api_replicas` independently scale the four Deployments, which carry no
+disruption budget of their own.
 
 ---
 
@@ -138,10 +165,13 @@ terraform apply
 ```
 
 This is a normal single apply, including on a fresh local state. The CSI
-`SecretProviderClass` custom resources are applied through the Kubectl provider,
-which defers API discovery until apply after GKE is available. GKE's managed CSI
-add-on can take a short time to register its CRD; Terraform retries that step
-automatically.
+`SecretProviderClass` custom resource is applied through the Kubectl provider
+in combined mode; split mode applies one class per role. The provider defers
+API discovery until apply after GKE is available. GKE's managed CSI add-on can
+take a short time to register its CRD; Terraform retries that step
+automatically. The provider remains intentionally pinned because these CRDs are
+installed by GKE after cluster creation and must be applied without Terraform
+discovering their schemas during the initial plan.
 
 The control plane enables Gateway API and reads the shared edge IP, Certificate
 Manager map, and status hostname from
@@ -162,6 +192,7 @@ terraform output events_webhook_url         # configure as GitHub webhook target
 terraform output api_url                    # open the UI or configure fireworkctl
 terraform output status_domain              # dedicated UI/API hostname
 terraform output operator_token_secret_id   # retrieve explicitly from Secret Manager
+terraform output controlplane_network_self_link # used for private data-plane peering
 ```
 
 If `use_control_plane_remote_state = true` in the data-plane (the default), it reads these from `../../control-plane/gcp/terraform.tfstate` automatically — no manual copying needed.
@@ -170,7 +201,31 @@ The GKE Gateway binds the durable public IP and Certificate Manager map during
 this apply. Configure the GitHub webhook only after the Gateway is ready and
 both public certificates are `ACTIVE`; the internal demo certificate is never
 exposed publicly. The events hostname routes only the exact webhook path, while
-the status hostname routes to the authenticated API/UI.
+the status hostname routes to the authenticated API/UI. The registry uses an
+internal TCP load balancer. The data-plane stack creates both directions of
+VPC peering from the control-plane state output and reaches the registry over
+that private path. The data-plane stack owns both peering resources; deploy the
+data plane before destroying the control plane so the peering is removed first.
+
+### Migrating an existing split deployment
+
+This change moves the registry load-balancer address from an external to an
+internal address. Before the first apply against an existing split deployment,
+delete the old GKE-created registry Service and wait for its external forwarding
+rule to be released:
+
+```bash
+# Record the old external address first, then delete the Service that owns its
+# GKE forwarding rule.
+kubectl -n firework delete service firework-registry
+# Wait until the old forwarding rule for that address is gone, then run the
+# normal Terraform apply to create the internal Service and address.
+```
+
+This one-time step avoids asking Terraform to destroy an external address that
+is still referenced by the old forwarding rule. The new combined default also
+replaces the four split Deployments, so review the availability trade-off above
+before applying without `controlplane_service_mode = "split"`.
 
 Retrieve the operator token without placing it in Terraform output or shell
 history, write it to a mode-0600 file, and point the CLI at that file:
@@ -194,6 +249,9 @@ The state/config bucket has versioning enabled and `force_destroy` defaults to `
 ```bash
 terraform destroy
 ```
+
+When a data plane exists, destroy it first; its stack owns the VPC peering
+resources attached to the control-plane VPC.
 
 ## Getting access to underlying Kubernetes cluster
 
