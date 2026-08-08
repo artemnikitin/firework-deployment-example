@@ -3,15 +3,49 @@
 # -----------------------------------------------------------------------------
 
 locals {
+  # Subnets are keyed by availability zone rather than by list position, and
+  # each AZ's CIDR is derived from the AZ name rather than its index in
+  # var.availability_zones. Both matter: with positional keys and index-derived
+  # CIDRs, adding, removing, or reordering an AZ renumbers every AZ after it,
+  # which forces subnet replacement and fails with InvalidSubnet.Conflict
+  # because the new subnet wants a CIDR the old one still holds.
+  #
+  # With this scheme an AZ always gets the same CIDR, so changing the AZ list
+  # only creates or destroys the subnets for the AZs that were actually added
+  # or removed.
+  az_letters = ["a", "b", "c", "d", "e", "f", "g", "h"]
+  az_slots   = { for az in var.availability_zones : az => index(local.az_letters, substr(az, -1, 1)) }
+
+  azs_sorted = sort(var.availability_zones)
+
   # Nodes live in public subnets by default so the deployment needs no NAT
   # gateways. Set node_network_placement = "private" to restore NAT egress.
   node_subnets_are_public = var.node_network_placement == "public"
-  node_subnet_ids         = local.node_subnets_are_public ? aws_subnet.public[*].id : aws_subnet.private[*].id
+  node_subnet_ids = [
+    for az in local.azs_sorted :
+    (local.node_subnets_are_public ? aws_subnet.public[az].id : aws_subnet.private[az].id)
+  ]
 
   nat_enabled = !local.node_subnets_are_public
-  nat_count = local.nat_enabled ? (
-    var.nat_gateway_mode == "single" ? 1 : length(var.availability_zones)
-  ) : 0
+
+  # "single" uses a fixed "shared" key rather than the first AZ's name, so the
+  # gateway is never labelled with an availability zone it is not specific to.
+  nat_keys = !local.nat_enabled ? [] : (
+    var.nat_gateway_mode == "single" ? ["shared"] : local.azs_sorted
+  )
+  nat_primary_az = local.azs_sorted[0]
+}
+
+# Region/AZ agreement is checked here rather than in a variable validation
+# block: referencing another variable inside validation requires Terraform 1.9,
+# and this stack supports >= 1.5.
+resource "terraform_data" "validate_network" {
+  lifecycle {
+    precondition {
+      condition     = alltrue([for az in var.availability_zones : startswith(az, var.aws_region)])
+      error_message = "Every availability_zones entry must belong to aws_region (${var.aws_region})."
+    }
+  }
 }
 
 resource "aws_vpc" "main" {
@@ -25,14 +59,14 @@ resource "aws_vpc" "main" {
 # --- Public subnets (ALBs, NAT gateways, and nodes in public placement) ---
 
 resource "aws_subnet" "public" {
-  count = length(var.availability_zones)
+  for_each = toset(var.availability_zones)
 
   vpc_id                  = aws_vpc.main.id
-  cidr_block              = cidrsubnet(var.vpc_cidr, 8, count.index)
-  availability_zone       = var.availability_zones[count.index]
+  cidr_block              = cidrsubnet(var.vpc_cidr, 8, local.az_slots[each.key])
+  availability_zone       = each.key
   map_public_ip_on_launch = true
 
-  tags = { Name = "${var.project_name}-public-${var.availability_zones[count.index]}" }
+  tags = { Name = "${var.project_name}-public-${each.key}" }
 }
 
 # --- Private subnets (EC2 nodes in private placement) ---
@@ -41,13 +75,13 @@ resource "aws_subnet" "public" {
 # means switching node_network_placement does not reshape the whole VPC.
 
 resource "aws_subnet" "private" {
-  count = length(var.availability_zones)
+  for_each = toset(var.availability_zones)
 
   vpc_id            = aws_vpc.main.id
-  cidr_block        = cidrsubnet(var.vpc_cidr, 8, count.index + 100)
-  availability_zone = var.availability_zones[count.index]
+  cidr_block        = cidrsubnet(var.vpc_cidr, 8, local.az_slots[each.key] + 100)
+  availability_zone = each.key
 
-  tags = { Name = "${var.project_name}-private-${var.availability_zones[count.index]}" }
+  tags = { Name = "${var.project_name}-private-${each.key}" }
 }
 
 # --- Internet gateway ---
@@ -65,26 +99,21 @@ resource "aws_internet_gateway" "main" {
 # for cost-sensitive deployments, at the cost of an AZ dependency and cross-AZ
 # data charges for non-S3 egress from the other zones.
 
-locals {
-  # In "single" mode one gateway serves every AZ, so an AZ suffix would name a
-  # zone the gateway is not specific to.
-  nat_name_suffixes = var.nat_gateway_mode == "single" ? ["shared"] : var.availability_zones
-}
-
 resource "aws_eip" "nat" {
-  count  = local.nat_count
+  for_each = toset(local.nat_keys)
+
   domain = "vpc"
 
-  tags = { Name = "${var.project_name}-nat-eip-${local.nat_name_suffixes[count.index]}" }
+  tags = { Name = "${var.project_name}-nat-eip-${each.key}" }
 }
 
 resource "aws_nat_gateway" "main" {
-  count = local.nat_count
+  for_each = toset(local.nat_keys)
 
-  allocation_id = aws_eip.nat[count.index].id
-  subnet_id     = aws_subnet.public[count.index].id
+  allocation_id = aws_eip.nat[each.key].id
+  subnet_id     = aws_subnet.public[each.key == "shared" ? local.nat_primary_az : each.key].id
 
-  tags = { Name = "${var.project_name}-nat-${local.nat_name_suffixes[count.index]}" }
+  tags = { Name = "${var.project_name}-nat-${each.key}" }
 
   depends_on = [aws_internet_gateway.main]
 }
@@ -103,14 +132,14 @@ resource "aws_route_table" "public" {
 }
 
 resource "aws_route_table_association" "public" {
-  count = length(var.availability_zones)
+  for_each = aws_subnet.public
 
-  subnet_id      = aws_subnet.public[count.index].id
+  subnet_id      = each.value.id
   route_table_id = aws_route_table.public.id
 }
 
 resource "aws_route_table" "private" {
-  count = length(var.availability_zones)
+  for_each = toset(var.availability_zones)
 
   vpc_id = aws_vpc.main.id
 
@@ -121,18 +150,18 @@ resource "aws_route_table" "private" {
 
     content {
       cidr_block     = "0.0.0.0/0"
-      nat_gateway_id = aws_nat_gateway.main[var.nat_gateway_mode == "single" ? 0 : count.index].id
+      nat_gateway_id = aws_nat_gateway.main[var.nat_gateway_mode == "single" ? "shared" : each.key].id
     }
   }
 
-  tags = { Name = "${var.project_name}-private-rt-${var.availability_zones[count.index]}" }
+  tags = { Name = "${var.project_name}-private-rt-${each.key}" }
 }
 
 resource "aws_route_table_association" "private" {
-  count = length(var.availability_zones)
+  for_each = aws_subnet.private
 
-  subnet_id      = aws_subnet.private[count.index].id
-  route_table_id = aws_route_table.private[count.index].id
+  subnet_id      = each.value.id
+  route_table_id = aws_route_table.private[each.key].id
 }
 
 # --- S3 gateway endpoint ---
@@ -156,7 +185,7 @@ resource "aws_vpc_endpoint" "s3" {
   # node_network_placement without needing to be reshaped.
   route_table_ids = concat(
     [aws_route_table.public.id],
-    aws_route_table.private[*].id,
+    [for rt in aws_route_table.private : rt.id],
   )
 
   tags = { Name = "${var.project_name}-s3-endpoint" }

@@ -29,9 +29,36 @@ variable "vpc_cidr" {
 }
 
 variable "availability_zones" {
-  description = "Availability zones to deploy into"
+  description = <<-EOT
+    Availability zones to deploy into. Any number from 2 upwards works, in any
+    order, and the list can be changed later: each AZ's subnet CIDR is derived
+    from the AZ name, not from its position, so adding or removing a zone does
+    not renumber the others. Independent of node_count — the Auto Scaling Group
+    spreads whatever number of nodes you ask for across these zones.
+  EOT
   type        = list(string)
   default     = ["us-east-1a", "us-east-1c"]
+
+  validation {
+    # An Application Load Balancer requires subnets in at least two zones, and
+    # the ALB lives in these subnets. This is an AWS constraint, not a limit of
+    # this stack.
+    condition     = length(var.availability_zones) >= 2
+    error_message = "availability_zones must contain at least 2 zones: the ALB requires subnets in two availability zones."
+  }
+
+  validation {
+    condition     = length(distinct(var.availability_zones)) == length(var.availability_zones)
+    error_message = "availability_zones must not contain duplicates."
+  }
+
+  validation {
+    # Subnet CIDRs are derived from the trailing zone letter, so names must be
+    # of the standard <region><letter> form with a letter in a-h. Local Zone and
+    # Wavelength names (for example us-east-1-bos-1a) are not supported here.
+    condition     = alltrue([for az in var.availability_zones : can(regex("^[a-z]{2}-[a-z]+-[0-9][a-h]$", az))])
+    error_message = "Each availability_zones entry must look like us-east-1a, with a trailing zone letter in the range a-h. Local Zone and Wavelength zone names are not supported."
+  }
 }
 
 variable "node_network_placement" {
