@@ -185,12 +185,15 @@ else
   # failure would report "no orphaned records found" after an auth or
   # permission error.
   uri_output=""
-  if ! uri_output=$(gcloud storage ls "gs://${bucket}/${records_prefix}**" --project "$project" 2>&1); then
-    if grep -qiE "matched no objects|did not match any" <<<"$uri_output"; then
+  error_file=$(mktemp)
+  trap 'rm -f "$error_file"' EXIT
+  if ! uri_output=$(gcloud storage ls "gs://${bucket}/${records_prefix}**" --project "$project" 2>"$error_file"); then
+    error_output=$(<"$error_file")
+    if grep -qiE "matched no objects|did not match any" <<<"$error_output"; then
       uri_output=""
     else
       echo "ERROR: could not list gs://${bucket}/${records_prefix}. Refusing to report 'none found' from a failed lookup." >&2
-      printf '%s\n' "$uri_output" >&2
+      printf '%s\n' "$error_output" >&2
       exit 1
     fi
   fi

@@ -11,8 +11,9 @@ variable "project_name" {
 }
 
 variable "control_plane_state_path" {
-  type    = string
-  default = "../../control-plane/aws/terraform.tfstate"
+  description = "Path to the control-plane Terraform state used for mandatory auto-wiring"
+  type        = string
+  default     = "../../control-plane/aws/terraform.tfstate"
 }
 
 variable "vpc_cidr" {

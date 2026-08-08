@@ -7,19 +7,23 @@ locals {
   controller_container_name   = "${var.project_name}-controller"
   api_container_name          = "${var.project_name}-api"
   all_container_name          = "${var.project_name}-controlplane"
-  controlplane_service_name   = var.controlplane_service_mode == "all" ? local.all_container_name : local.events_container_name
+  events_service_name         = "${var.project_name}-controlplane-events"
+  registry_service_name       = "${var.project_name}-controlplane-registry"
+  controller_service_name     = "${var.project_name}-controlplane-controller"
+  api_service_name            = "${var.project_name}-controlplane-api"
+  controlplane_service_name   = var.controlplane_service_mode == "all" ? local.all_container_name : local.events_service_name
   controlplane_log_group_name = var.controlplane_service_mode == "all" ? "/ecs/${var.project_name}/controlplane" : "/ecs/${var.project_name}/controlplane-controller"
   controlplane_dashboard_services = var.controlplane_service_mode == "all" ? [
     { name = local.all_container_name, label = "all roles" },
     ] : [
-    { name = local.events_container_name, label = "events" },
-    { name = local.registry_container_name, label = "registry" },
-    { name = local.controller_container_name, label = "controller" },
-    { name = local.api_container_name, label = "api" },
+    { name = local.events_service_name, label = "events" },
+    { name = local.registry_service_name, label = "registry" },
+    { name = local.controller_service_name, label = "controller" },
+    { name = local.api_service_name, label = "api" },
   ]
   controlplane_running_metrics = [
     for service in local.controlplane_dashboard_services : [
-      "AWS/ECS", "RunningTaskCount", "ClusterName", "${var.project_name}-controlplane", "ServiceName", service.name,
+      "AWS/ECS", "RunningTaskCount", "ClusterName", aws_ecs_cluster.controlplane.name, "ServiceName", service.name,
       { stat = "Average", label = "${service.label} running" },
     ]
   ]

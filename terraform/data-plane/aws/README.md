@@ -26,6 +26,8 @@ This stack depends on:
   `../../control-plane/aws/terraform.tfstate` (`control_plane_state_path` can
   point elsewhere). The control-plane state must exist before this stack is
   planned or applied; duplicate manual overrides are intentionally not supported.
+  If that state is unavailable, restore or relocate the control-plane state before
+  planning this stack; there is no manual-wiring recovery path.
 - Existing S3 images bucket and ARN
 - Firework node AMI source (explicit ID, name pattern lookup, or Packer manifest)
 
@@ -270,7 +272,7 @@ Instances can start while egress routes, NAT gateways, and the S3 endpoint are
 still converging. The ASG waits for route-table associations and the S3 gateway
 endpoint, and node user-data additionally waits for the regional EC2 endpoint
 before doing metadata or storage setup. It then retries AWS API, S3, Secrets Manager,
-package and Secrets Manager calls with bounded exponential backoff. This keeps a
+and package calls with bounded exponential backoff. This keeps a
 transient network timeout from making cloud-init's one-shot bootstrap fail
 permanently. The launch template gzip-compresses user-data before base64
 encoding so the complete bootstrap remains within EC2's 16 KiB raw-payload

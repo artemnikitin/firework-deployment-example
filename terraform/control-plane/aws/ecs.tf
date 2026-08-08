@@ -470,16 +470,19 @@ locals {
     exec ${var.controlplane_binary_path} --config /tmp/firework/controlplane.yaml
   EOT
 
-  all_secret_entries = [
-    { name = "ALL_TLS_CERT_PEM", valueFrom = local.effective_registry_tls_cert_secret_arn },
-    { name = "ALL_TLS_KEY_PEM", valueFrom = local.effective_registry_tls_key_secret_arn },
-    { name = "ALL_CLIENT_CA_PEM", valueFrom = local.effective_registry_client_ca_secret_arn },
-    { name = "ALL_ENROLLMENT_CA_PEM", valueFrom = local.effective_registry_enrollment_ca_secret_arn },
-    { name = "ALL_ENROLLMENT_CA_KEY_PEM", valueFrom = local.effective_registry_enrollment_ca_key_secret_arn },
-    { name = "ALL_BOOTSTRAP_TOKEN", valueFrom = local.effective_registry_bootstrap_token_secret_arn },
-    { name = "ALL_GITHUB_WEBHOOK_SECRET", valueFrom = local.effective_github_webhook_secret_arn },
-    { name = "ALL_OPERATOR_TOKEN", valueFrom = local.effective_operator_token_secret_arn },
-  ]
+  all_secret_entries = concat(
+    [
+      { name = "ALL_TLS_CERT_PEM", valueFrom = local.effective_registry_tls_cert_secret_arn },
+      { name = "ALL_TLS_KEY_PEM", valueFrom = local.effective_registry_tls_key_secret_arn },
+      { name = "ALL_CLIENT_CA_PEM", valueFrom = local.effective_registry_client_ca_secret_arn },
+      { name = "ALL_ENROLLMENT_CA_PEM", valueFrom = local.effective_registry_enrollment_ca_secret_arn },
+      { name = "ALL_ENROLLMENT_CA_KEY_PEM", valueFrom = local.effective_registry_enrollment_ca_key_secret_arn },
+      { name = "ALL_BOOTSTRAP_TOKEN", valueFrom = local.effective_registry_bootstrap_token_secret_arn },
+      { name = "ALL_GITHUB_WEBHOOK_SECRET", valueFrom = local.effective_github_webhook_secret_arn },
+      { name = "ALL_OPERATOR_TOKEN", valueFrom = local.effective_operator_token_secret_arn },
+    ],
+    var.github_token_secret_arn != "" ? [{ name = "GITHUB_TOKEN", valueFrom = var.github_token_secret_arn }] : [],
+  )
 
   all_container_definition = merge(
     {
