@@ -10,7 +10,8 @@ dns_zone_name = "firework-gcp"
 base_domain       = "gcp.example.com"
 images_bucket_name = "firework-images-amd64-my-gcp-project"
 
-# The default local-state wiring reads these from terraform/control-plane/gcp.
+# The default local-state wiring reads these from terraform/control-plane/gcp,
+# including the VPC self-link used to create private peering.
 # Uncomment only when the control-plane state file is intentionally unavailable.
 # config_bucket_name                 = "firework-cp-state-my-gcp-project"
 # config_prefix                      = "cp/v1/"
@@ -18,6 +19,7 @@ images_bucket_name = "firework-images-amd64-my-gcp-project"
 # registry_server_name               = "34.0.0.1"
 # registry_ca_secret_id              = "firework-cp-enrollment-ca-cert"
 # registry_bootstrap_token_secret_id = "firework-cp-bootstrap-token"
+# control_plane_network_self_link    = "projects/my-gcp-project/global/networks/firework-cp-vpc"
 
 node_machine_type = "n4-standard-8"
 node_count        = 3

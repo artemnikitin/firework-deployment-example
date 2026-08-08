@@ -54,7 +54,11 @@ resource "tls_private_key" "auto_events_tls" {
 resource "tls_cert_request" "auto_events_tls" {
   count           = local.auto_generate_tls_material ? 1 : 0
   private_key_pem = tls_private_key.auto_events_tls[0].private_key_pem
-  dns_names       = [trimsuffix(var.events_domain, ".")]
+  ip_addresses    = var.base_domain == "" ? [google_compute_address.registry.address] : []
+  dns_names = distinct(compact(concat(
+    [trimsuffix(var.events_domain, ".")],
+    var.base_domain != "" ? ["registry.${trimsuffix(var.base_domain, ".")}"] : [],
+  )))
 
   subject {
     common_name  = "${local.name_prefix}-events"

@@ -89,16 +89,17 @@ flowchart LR
   deployment API and same-origin UI. AWS uses a read-only S3 task role and GCP
   uses a read-only GCS Workload Identity for the status service.
 
-For GCP, the control-plane roles run as GKE Autopilot workloads. The events
-webhook and authenticated API/UI use distinct hostnames on one GKE Gateway,
-backed by durable Certificate Manager DNS-authorized certificates and a shared
-static IP from `terraform/events-edge/gcp`; registry remains a TCP
-LoadBalancer. Each role has its own Workload Identity and only the Secret
-Manager CSI mounts it needs. Both
-planes use private VMs/nodes with Cloud NAT; the x86_64 data plane is a regional
-managed instance group using nested virtualization, GCS, and a global HTTPS
-load balancer to Traefik. Terraform state is local in the example stacks. See
-the GCP guides above for container image, DNS delegation, and TLS prerequisites.
+For GCP, the control plane runs by default as one all-role GKE Autopilot
+Deployment with a shared Workload Identity; set `controlplane_service_mode =
+"split"` for one Deployment and identity per role. The events webhook and
+authenticated API/UI use distinct hostnames on one GKE Gateway, backed by
+durable Certificate Manager DNS-authorized certificates and a shared static IP
+from `terraform/events-edge/gcp`. The registry is an internal TCP LoadBalancer.
+The data-plane VPC peers with the control-plane VPC and uses Private Google
+Access, so its private regional managed instance group needs no Cloud NAT or
+public node IPs. Terraform state is local in the example stacks. See the GCP
+guides above for container image, DNS delegation, private peering, and TLS
+prerequisites.
 
 ## Cleanup
 

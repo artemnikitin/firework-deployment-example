@@ -6,6 +6,28 @@ output "config_prefix" {
   value = local.state_prefix_with_slash
 }
 
+output "controlplane_service_mode" {
+  value       = var.controlplane_service_mode
+  description = "GKE control-plane layout mode: all or split."
+}
+
+output "controlplane_service_names" {
+  value = var.controlplane_service_mode == "all" ? [
+    "firework-controlplane",
+    ] : [
+    "firework-events",
+    "firework-registry",
+    "firework-controller",
+    "firework-api",
+  ]
+  description = "GKE control-plane workload names used by this stack."
+}
+
+output "controlplane_network_self_link" {
+  value       = google_compute_network.control_plane.self_link
+  description = "Self-link of the VPC used by the GKE control plane, for data-plane VPC peering."
+}
+
 output "events_webhook_url" {
   value = "https://${trimsuffix(var.events_domain, ".")}/v1/events/github"
 }
@@ -26,6 +48,11 @@ output "registry_url" {
 
 output "registry_server_name" {
   value = var.base_domain != "" ? "registry.${trimsuffix(var.base_domain, ".")}" : google_compute_address.registry.address
+}
+
+output "registry_internal_ip" {
+  value       = google_compute_address.registry.address
+  description = "Internal address assigned to the registry load balancer."
 }
 
 output "registry_ca_secret_id" {

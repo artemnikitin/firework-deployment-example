@@ -104,7 +104,18 @@ variable "controlplane_image" {
 variable "controlplane_deployment_revision" {
   type        = string
   default     = ""
-  description = "Opaque revision changed to roll all GKE control-plane Deployments when controlplane_image uses a mutable tag. Set this to the published image digest."
+  description = "Opaque revision changed to roll the GKE control-plane workload when controlplane_image uses a mutable tag. Set this to the published image digest."
+}
+
+variable "controlplane_service_mode" {
+  type        = string
+  default     = "all"
+  description = "Control-plane GKE layout. 'all' runs every role in one Deployment (the demo default); 'split' preserves one Deployment per role."
+
+  validation {
+    condition     = contains(["all", "split"], var.controlplane_service_mode)
+    error_message = "controlplane_service_mode must be either \"all\" or \"split\"."
+  }
 }
 
 variable "git_repo_url" {
@@ -168,7 +179,7 @@ variable "events_port" {
 variable "registry_port" {
   type        = number
   default     = 9443
-  description = "HTTPS port for the registry role and its external load balancer."
+  description = "HTTPS port for the registry role and its internal load balancer."
 
   validation {
     condition     = var.registry_port > 0 && var.registry_port < 65536
@@ -215,6 +226,24 @@ variable "api_replicas" {
   type        = number
   default     = 1
   description = "Number of replicas for the read-only API Deployment."
+}
+
+variable "controlplane_replicas" {
+  type        = number
+  default     = 1
+  description = "Number of replicas for the combined all-role control-plane Deployment."
+}
+
+variable "controlplane_cpu_request" {
+  type        = string
+  default     = "1000m"
+  description = "CPU request for each replica of the combined all-role control-plane Deployment."
+}
+
+variable "controlplane_memory_request" {
+  type        = string
+  default     = "2Gi"
+  description = "Memory request for each replica of the combined all-role control-plane Deployment."
 }
 
 variable "reconcile_on_start" {
@@ -332,6 +361,6 @@ variable "operator_token_secret_id" {
 
 variable "registry_allowed_cidrs" {
   type        = list(string)
-  default     = ["0.0.0.0/0"]
-  description = "Source CIDRs allowed to reach the registry load balancer."
+  default     = ["10.30.0.0/24"]
+  description = "Source CIDRs allowed to reach the internal registry load balancer. Keep this aligned with the data-plane network CIDR."
 }

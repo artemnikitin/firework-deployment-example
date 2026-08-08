@@ -192,6 +192,12 @@ variable "control_plane_state_path" {
   description = "Path to the control-plane terraform.tfstate (absolute or relative to this module). Used when use_control_plane_remote_state is true."
 }
 
+variable "control_plane_network_self_link" {
+  type        = string
+  default     = ""
+  description = "Optional control-plane VPC self-link override. Normally auto-wired from control-plane state for VPC peering."
+}
+
 variable "config_bucket_name" {
   type        = string
   default     = ""

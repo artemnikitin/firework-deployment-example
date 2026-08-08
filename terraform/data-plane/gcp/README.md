@@ -1,8 +1,10 @@
 # GCP data plane
 
-This stack creates a private managed instance group of x86_64 Firework nodes,
-Cloud NAT, and a global HTTPS load balancer that
-terminates TLS and forwards HTTP to Traefik on port 8080.
+This stack creates a private managed instance group of x86_64 Firework nodes
+with no public IPs or Cloud NAT, plus a global HTTPS load balancer that
+terminates TLS and forwards HTTP to Traefik on port 8080. The stack peers its
+VPC with the control-plane VPC and reaches the internal registry load balancer
+over that private route.
 
 Terraform state is **local**. The stack auto-wires control-plane outputs from
 the local control-plane state file by default.
@@ -11,6 +13,8 @@ Prerequisites:
 
 - Build the `firework-node-gcp` image family with `packer/gcp`.
 - Apply `terraform/control-plane/gcp`; the default local-state wiring reads its outputs automatically.
+- Keep the control-plane and data-plane `network_cidr` values non-overlapping;
+  the default ranges are `10.20.0.0/24` and `10.30.0.0/24`.
 - Create and delegate the pre-existing Cloud DNS zone.
 - Grant the Terraform principal `roles/iam.serviceAccountUser` at project scope
   before the first apply, so it can attach the node service account Terraform creates.
@@ -50,8 +54,8 @@ To move the data plane to another region, change `gcp_region`, either clear
 `network_cidr`.
 The MIG uses create-before-destroy so Terraform can switch the global backend
 service to the replacement MIG before deleting the old one. The regional
-subnet, Cloud NAT/router, MIG, and log buckets are recreated; the global tenant
-IP, DNS record, and frontend remain managed in place.
+subnet, VPC peering, MIG, and log buckets are recreated; the global tenant IP,
+DNS record, and frontend remain managed in place.
 
 ```bash
 cd terraform/data-plane/gcp
@@ -62,7 +66,9 @@ terraform apply
 ```
 
 Certificate Manager issuance commonly takes 15–60 minutes after DNS
-authorization propagates. Nodes have no external IP; use IAP for SSH.
+authorization propagates. Nodes have no external IP or NAT path; Google API
+traffic uses Private Google Access, and registry traffic uses the peered
+internal load balancer. Use IAP for SSH.
 
 ## Persistent storage
 

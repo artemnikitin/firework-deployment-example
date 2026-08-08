@@ -26,6 +26,7 @@ locals {
 
   effective_registry_ca_secret_id              = var.registry_ca_secret_id != "" ? var.registry_ca_secret_id : try(local.control_plane_outputs.registry_ca_secret_id, "")
   effective_registry_bootstrap_token_secret_id = var.registry_bootstrap_token_secret_id != "" ? var.registry_bootstrap_token_secret_id : try(local.control_plane_outputs.registry_bootstrap_token_secret_id, "")
+  effective_control_plane_network_self_link    = var.control_plane_network_self_link != "" ? var.control_plane_network_self_link : try(local.control_plane_outputs.controlplane_network_self_link, "")
 }
 
 resource "terraform_data" "validate_control_plane_wiring" {
@@ -67,6 +68,11 @@ resource "terraform_data" "validate_control_plane_wiring" {
     precondition {
       condition     = local.effective_registry_bootstrap_token_secret_id != ""
       error_message = "registry_bootstrap_token_secret_id is required. Set it explicitly or auto-wire from control-plane outputs."
+    }
+
+    precondition {
+      condition     = local.effective_control_plane_network_self_link != ""
+      error_message = "control-plane network self-link is required for the private registry peering. Apply control-plane first or set control_plane_network_self_link explicitly."
     }
   }
 }
