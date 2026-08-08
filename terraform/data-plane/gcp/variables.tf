@@ -37,6 +37,11 @@ variable "base_domain" {
 variable "network_cidr" {
   type    = string
   default = "10.30.0.0/24"
+
+  validation {
+    condition     = can(cidrhost(var.network_cidr, 0))
+    error_message = "network_cidr must be a valid IPv4 CIDR block, for example 10.30.0.0/24."
+  }
 }
 
 variable "enable_cloud_nat" {

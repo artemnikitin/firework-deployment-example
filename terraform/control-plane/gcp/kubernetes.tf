@@ -944,7 +944,10 @@ resource "kubernetes_deployment" "all" {
 }
 
 resource "kubernetes_pod_disruption_budget_v1" "all" {
-  count = var.controlplane_service_mode == "all" ? 1 : 0
+  # A min_available of 1 against a single replica allows zero disruptions, so
+  # every voluntary eviction is refused: drains and Autopilot node upgrades
+  # stall until GKE force-terminates the pod. Only budget when scaled out.
+  count = var.controlplane_service_mode == "all" && var.controlplane_replicas > 1 ? 1 : 0
 
   metadata {
     name      = "firework-controlplane"

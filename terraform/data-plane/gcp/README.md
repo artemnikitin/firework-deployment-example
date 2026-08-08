@@ -54,7 +54,11 @@ To move the data plane to another region, change `gcp_region`, either clear
 `node_zones` or set zones of the new region, and use a new non-overlapping
 `network_cidr`. Update the control-plane `registry_allowed_cidrs` to include the
 new CIDR before applying this stack; its wiring precondition checks the pairing.
-The MIG uses create-before-destroy so Terraform can switch the global backend
+The check accepts any allowlist entry that contains `network_cidr`, so a supernet
+such as `10.0.0.0/8` covers a `10.30.0.0/24` data plane. It is skipped entirely
+when the control-plane state exports no `registry_allowed_cidrs` — an older
+control plane, or manual wiring — so a clean apply is not by itself evidence that
+the allowlist is right. The MIG uses create-before-destroy so Terraform can switch the global backend
 service to the replacement MIG before deleting the old one. The regional
 subnet, VPC peering, MIG, and log buckets are recreated; the global tenant IP,
 DNS record, and frontend remain managed in place.

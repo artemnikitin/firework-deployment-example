@@ -44,6 +44,12 @@ gcloud dns managed-zones create firework-gcp \
 
 Verify delegation: `dig NS gcp.example.com +short`
 
+When `base_domain` is set, the stack publishes `registry.<base_domain>` into this
+zone. The registry address is internal, so the record resolves to an RFC 1918
+address that is reachable only from the control-plane VPC and its peers — the
+name is public, the endpoint is not. Use a private zone instead if advertising
+the internal address is unacceptable.
+
 ### 3. Terraform identity permissions
 
 The principal running `apply` needs at minimum:
@@ -119,12 +125,16 @@ workload by default, or all four role workloads in split mode. The
 `image_pull_policy = "Always"` setting pulls the current image for the tag.
 
 The default combined Deployment requests 1000m CPU and 2Gi memory per replica
-and runs one replica. A PodDisruptionBudget protects that replica from voluntary
-disruption, but cannot prevent downtime from an OOM, node failure, or other
-unplanned outage. Set `controlplane_replicas`,
+and runs one replica, so any disruption — a node drain, an Autopilot upgrade, an
+OOM, or a node failure — takes the control plane down until the pod is
+rescheduled. A PodDisruptionBudget is created only when `controlplane_replicas`
+is above 1: budgeting a single replica would allow zero voluntary disruptions,
+which blocks drains and Autopilot maintenance without preventing the outage.
+Set `controlplane_replicas`,
 `controlplane_cpu_request`, or `controlplane_memory_request` to tune it. In
 split mode, `events_replicas`, `registry_replicas`, `controller_replicas`, and
-`api_replicas` independently scale the four Deployments.
+`api_replicas` independently scale the four Deployments, which carry no
+disruption budget of their own.
 
 ---
 

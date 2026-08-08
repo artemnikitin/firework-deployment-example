@@ -274,8 +274,8 @@ variable "auto_create_demo_secrets" {
       var.bootstrap_token_secret_id == "",
       var.events_tls_cert_secret_id == "",
       var.events_tls_key_secret_id == "",
-      var.controlplane_service_mode == "all" || var.registry_tls_cert_secret_id == "",
-      var.controlplane_service_mode == "all" || var.registry_tls_key_secret_id == "",
+      var.registry_tls_cert_secret_id == "",
+      var.registry_tls_key_secret_id == "",
       var.enrollment_ca_cert_secret_id == "",
       var.enrollment_ca_key_secret_id == "",
       var.operator_token_secret_id == "",
@@ -283,13 +283,13 @@ variable "auto_create_demo_secrets" {
       var.bootstrap_token_secret_id != "",
       var.events_tls_cert_secret_id != "",
       var.events_tls_key_secret_id != "",
-      var.controlplane_service_mode == "all" || var.registry_tls_cert_secret_id != "",
-      var.controlplane_service_mode == "all" || var.registry_tls_key_secret_id != "",
+      var.controlplane_service_mode == "all" ? var.registry_tls_cert_secret_id == "" : var.registry_tls_cert_secret_id != "",
+      var.controlplane_service_mode == "all" ? var.registry_tls_key_secret_id == "" : var.registry_tls_key_secret_id != "",
       var.enrollment_ca_cert_secret_id != "",
       var.enrollment_ca_key_secret_id != "",
       var.operator_token_secret_id != "",
     ])
-    error_message = "Use either fully auto-generated TLS/PKI/operator material or provide every TLS, enrollment CA, bootstrap-token, and operator-token secret ID; partial overrides are unsupported."
+    error_message = "Use either fully auto-generated TLS/PKI/operator material or provide every TLS, enrollment CA, bootstrap-token, and operator-token secret ID; partial overrides are unsupported. In \"all\" service mode the combined pod terminates registry TLS on the events certificate, so registry_tls_cert_secret_id and registry_tls_key_secret_id must be left empty in both cases."
   }
 }
 
