@@ -122,7 +122,7 @@ variable "s3_configs_prefix" {
 }
 
 variable "s3_images_bucket_id" {
-  description = "Name/ID of the pre-existing S3 images bucket (managed by CI, not Terraform)"
+  description = "Name/ID of the pre-existing S3 images bucket (managed by CI, not Terraform). Holds every architecture under an <arch>/ key prefix; nodes read the prefix matching their own architecture."
   type        = string
 }
 
@@ -231,7 +231,7 @@ variable "node_ami_owners" {
 }
 
 variable "node_ami_architecture" {
-  description = "Architecture filter used when resolving AMI by name pattern. Must match the architecture the node AMI was built for and the rootfs images in s3_images_bucket_id."
+  description = "Architecture filter used when resolving AMI by name pattern. Must match the architecture the node AMI was built for. The images bucket holds every architecture, so nodes resolve their rootfs images automatically and this does not need to be matched against a bucket."
   type        = string
   default     = "x86_64"
 

@@ -11,7 +11,7 @@ variable "gcp_region" {
 
 variable "images_bucket_name" {
   type        = string
-  description = "Globally unique name for the amd64 node images bucket. Used by Packer to upload images and by data-plane nodes to rsync images at boot."
+  description = "Globally unique name for the node images bucket. Holds every architecture under an <arch>/ key prefix; nodes read the prefix matching their own architecture. Used by Packer to upload images and by data-plane nodes to rsync images at boot."
 }
 
 variable "packer_service_account" {

@@ -189,9 +189,12 @@ node_ami_architecture      = "arm64"
 ```
 
 and rebuild the AMI with `architecture = "arm64"` (see
-[packer/aws/README.md](../../../packer/aws/README.md)) and point
-`s3_images_bucket_id` at the arm64 rootfs bucket. Host and guest architecture
-must match; a mismatch fails at microVM start, not at deploy time.
+[packer/aws/README.md](../../../packer/aws/README.md)). `s3_images_bucket_id`
+stays as it is: the bucket holds every architecture under an `<arch>/` key
+prefix and the agent reads the prefix matching its own node, so host and guest
+architecture cannot diverge. If the arm64 images have not been published yet,
+the node fails at image sync naming the missing key, rather than at microVM
+start.
 
 **Delete or rebuild `packer/aws/manifest.json` when switching architecture.**
 `use_packer_manifest_ami` defaults to `true`, so a stale manifest left over from
