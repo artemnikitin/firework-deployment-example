@@ -4,7 +4,7 @@ Replace `IMAGES_BUCKET_NAME` and `ACCOUNT_ID` in the JSON examples before use.
 
 | File | Principal | Purpose |
 |---|---|---|
-| `01-ci-images-s3.json` | GitHub Actions CI | Upload ARM64 rootfs images to S3 |
+| `01-ci-images-s3.json` | GitHub Actions CI | Upload rootfs images for every architecture to S3 |
 | `02-terraform-deploy.json` | Terraform operator | Deploy AWS control and data planes |
 | `03-packer-build.json` | Packer operator | Build the ARM64 AMI |
 
