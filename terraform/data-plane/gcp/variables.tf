@@ -144,11 +144,28 @@ variable "filestore_deletion_protection" {
 variable "node_zones" {
   type        = list(string)
   default     = null
-  description = "Optional three-zone regional-MIG placement override. Leave null for <region>-a, <region>-b, and <region>-c."
+  description = <<-EOT
+    Optional regional-MIG zone placement override. Any two or more distinct
+    zones of gcp_region are accepted, in any order. Leave null to use every
+    zone the region currently reports as UP, which is discovered rather than
+    assumed because not all regions have a "-a" zone. Independent of
+    node_count: the regional MIG spreads whatever target size you ask for
+    across these zones.
+  EOT
 
   validation {
-    condition     = var.node_zones == null || (length(var.node_zones) == 3 && length(distinct(var.node_zones)) == 3)
-    error_message = "node_zones must contain exactly three distinct zones."
+    condition     = var.node_zones == null || length(distinct(var.node_zones)) >= 2
+    error_message = "node_zones must contain at least two distinct zones."
+  }
+
+  validation {
+    condition     = var.node_zones == null || length(distinct(var.node_zones)) == length(var.node_zones)
+    error_message = "node_zones must not contain duplicates."
+  }
+
+  validation {
+    condition     = var.node_zones == null || alltrue([for z in var.node_zones : startswith(z, "${var.gcp_region}-")])
+    error_message = "Every node_zones entry must be a zone of gcp_region."
   }
 }
 

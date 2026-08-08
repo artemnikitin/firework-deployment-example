@@ -18,7 +18,11 @@ Usage:
 
 Required:
   --instance-id <id>   Target EC2 instance ID (must be SSM-managed)
-  --agent-path <path>  Local path to firework-agent binary
+  --agent-path <path>  Local path to firework-agent binary. Must match the
+                       node's architecture: firework-agent-linux-amd64 for the
+                       default x86_64 nodes, firework-agent-linux-arm64 for
+                       bare-metal Graviton nodes. A mismatched binary installs
+                       cleanly and then fails to execute.
   --ssh-key <path>     SSH private key for the target instance
 
 Options:
@@ -29,7 +33,7 @@ Options:
 Example:
   ./scripts/push-agent-to-node.sh \
     --instance-id i-0123456789abcdef0 \
-    --agent-path ../firework/bin/firework-agent-linux-arm64 \
+    --agent-path ../firework/bin/firework-agent-linux-amd64 \
     --ssh-key ~/.ssh/firework-demo.pem \
     --region us-east-1
 EOF
@@ -101,6 +105,36 @@ fi
 if [ ! -s "${AGENT_PATH}" ]; then
   echo "ERROR: agent binary is empty: ${AGENT_PATH}" >&2
   exit 1
+fi
+
+# The binary must match the node's CPU architecture. A mismatch copies and
+# installs cleanly and only fails when systemd tries to exec it, which is a
+# confusing way to find out. Nodes default to x86_64; bare-metal Graviton
+# nodes are arm64. Skipped when the instance cannot be described or when
+# 'file' is unavailable, so this never blocks an otherwise valid push.
+NODE_ARCH="$(aws ec2 describe-instances \
+  --instance-ids "${INSTANCE_ID}" \
+  --region "${REGION}" \
+  --query 'Reservations[0].Instances[0].Architecture' \
+  --output text 2>/dev/null || true)"
+
+if [ -n "${NODE_ARCH}" ] && [ "${NODE_ARCH}" != "None" ] && command -v file >/dev/null 2>&1; then
+  BINARY_INFO="$(file -b "${AGENT_PATH}")"
+  case "${NODE_ARCH}" in
+    x86_64) EXPECT='x86-64|x86_64' ;;
+    arm64) EXPECT='aarch64|ARM aarch64' ;;
+    *) EXPECT='' ;;
+  esac
+
+  if [ -n "${EXPECT}" ] && ! printf '%s' "${BINARY_INFO}" | grep -Eqi "${EXPECT}"; then
+    echo "ERROR: agent binary does not match the node architecture" >&2
+    echo "       instance ${INSTANCE_ID} is ${NODE_ARCH}" >&2
+    echo "       ${AGENT_PATH} is: ${BINARY_INFO}" >&2
+    echo "       Build a matching binary in the firework repo:" >&2
+    echo "         make build-linux-amd64   # for x86_64 nodes" >&2
+    echo "         make build-linux-arm64   # for arm64 nodes" >&2
+    exit 1
+  fi
 fi
 
 if [ -z "${SSH_KEY}" ]; then

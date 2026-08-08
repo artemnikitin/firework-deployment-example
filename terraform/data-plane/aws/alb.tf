@@ -7,7 +7,7 @@ resource "aws_lb" "main" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets            = aws_subnet.public[*].id
+  subnets            = [for az in local.azs_sorted : aws_subnet.public[az].id]
 
   drop_invalid_header_fields = true
 

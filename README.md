@@ -34,8 +34,8 @@ flowchart LR
       ALB["ALB :443 (HTTPS)"]
     end
 
-    subgraph Private["Private subnet"]
-      Node["c6g.metal node<br/>firework-agent + Traefik"]
+    subgraph Nodes["Node subnet (public by default)"]
+      Node["c8i.2xlarge node<br/>firework-agent + Traefik"]
       VM1["tenant-1-kibana VM :5611"]
       VM2["tenant-1-elasticsearch VM :9200"]
       VM3["tenant-2-kibana VM :5612"]
@@ -72,7 +72,14 @@ flowchart LR
 ## Key Notes
 
 - Deploy order matters: control-plane first, data-plane second.
-- Nodes are in private subnets; use AWS Session Manager for access — no SSH exposed.
+- On AWS, nodes are in public subnets by default so the stack creates no NAT
+  gateways. This is a demo-oriented cost default with real security trade-offs —
+  see [terraform/data-plane/aws/README.md](terraform/data-plane/aws/README.md)
+  and set `node_network_placement = "private"` for anything beyond a demo.
+- AWS nodes use x86_64 instances with nested virtualization rather than bare
+  metal, which is roughly six times cheaper per hour. Bare-metal Graviton
+  remains supported.
+- Node access always goes through AWS Session Manager — no SSH exposed.
 - ALB serves HTTPS (TLS 1.2/1.3); host-based routing per tenant is handled by Traefik on the nodes.
 - Each platform's domain variable is the single source of truth for DNS, the wildcard TLS certificate, and the agent `ingress_domain`. GitOps services set `metadata.subdomain: <label>` and resolve to `<subdomain>.<domain>` — `<subdomain>.<domain_name>` on AWS and `<subdomain>.<base_domain>` on GCP — so one provider-neutral GitOps tree serves both.
 - Optional step-ca service can issue short-lived node certs via AWS IID instead of static bootstrap tokens.

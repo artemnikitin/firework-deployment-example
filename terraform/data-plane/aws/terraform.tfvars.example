@@ -12,6 +12,18 @@ domain_name = "example.com"
 # Availability zones — update if deploying to a different region.
 # availability_zones = ["us-east-1a", "us-east-1c"]
 
+# Where Firecracker nodes run. "public" (default) uses internet gateway egress
+# and creates no NAT gateways — the cheapest option at demo scale. Read the
+# security trade-offs in README.md before keeping it: source/destination check
+# is disabled on these nodes, so the security group is the only inbound barrier.
+# Use "private" for anything beyond a demo.
+# node_network_placement = "public"
+
+# NAT topology, only used when node_network_placement = "private".
+# "per_az" (default) survives a single-AZ failure; "single" is cheaper but adds
+# an AZ dependency and cross-AZ charges for non-S3 egress.
+# nat_gateway_mode = "per_az"
+
 # Auto-wire control-plane outputs from local state (recommended).
 # If your control-plane state is elsewhere, update control_plane_state_path or
 # set use_control_plane_remote_state = false and provide manual overrides below.
@@ -61,9 +73,19 @@ s3_images_bucket_arn = "arn:aws:s3:::your-images-bucket-name"
 
 node_key_name = "my-key-pair"
 
-# Instance type must support bare-metal / KVM for Firecracker.
-# c6g.metal = ARM Graviton2, 64 vCPUs, 128 GB RAM.
-node_instance_type = "c6g.metal"
+# Instance type must expose /dev/kvm for Firecracker: either a bare-metal type,
+# or a virtual Intel type with node_nested_virtualization = true.
+# c8i.2xlarge = Intel, 8 vCPUs, 16 GB RAM — roughly 6x cheaper per hour than the
+# smallest Graviton metal SKU, which is 64 vCPUs whether you need them or not.
+node_instance_type         = "c8i.2xlarge"
+node_nested_virtualization = true
+
+# To use bare-metal Graviton nodes instead, all three must change together, and
+# the AMI must be rebuilt with architecture = "arm64" and s3_images_bucket_id
+# pointed at the arm64 rootfs bucket:
+# node_instance_type         = "c6g.metal"
+# node_nested_virtualization = false
+# node_ami_architecture      = "arm64"
 
 # Number of Firecracker nodes.
 node_count = 2

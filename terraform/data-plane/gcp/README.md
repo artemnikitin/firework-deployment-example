@@ -27,13 +27,27 @@ image declares the `GVNIC` guest OS feature. Images built by this Packer
 configuration do. Applying this stack creates a new template and rolls every
 node.
 
-`node_zones` optionally overrides the regional MIG's three zones. For a
-`us-central1` deployment, use `us-central1-a`, `us-central1-b`, and
-`us-central1-f` to avoid the exhausted `us-central1-c` pool. Changing the zone
-set replaces the regional MIG; Google does not support changing it in place.
+`node_zones` optionally overrides the regional MIG's zone placement. Any two or
+more distinct zones of `gcp_region` are accepted, in any order, and the count is
+independent of `node_count` — the regional MIG spreads whatever target size you
+ask for across the zones you give it.
 
-To move the data plane to another region, change `gcp_region`, set three zones
-in that region with `node_zones`, and use a new non-overlapping `network_cidr`.
+Leaving it `null` uses every zone the region currently reports as UP, discovered
+via `google_compute_zones` rather than assumed. This matters: not every region
+has a `-a` zone. `us-east1` and `europe-west1` both start at `-b`, so a
+hardcoded `<region>-a` default fails outright there.
+
+For a `us-central1` deployment, `us-central1-a`, `us-central1-b`, and
+`us-central1-f` avoid the exhausted `us-central1-c` pool. Changing the zone set
+replaces the regional MIG; Google does not support changing it in place.
+
+Unlike AWS, zone changes here never renumber subnet CIDRs: a GCP subnetwork is
+regional and spans every zone, so there is exactly one node subnet regardless of
+how many zones are in use.
+
+To move the data plane to another region, change `gcp_region`, either clear
+`node_zones` or set zones of the new region, and use a new non-overlapping
+`network_cidr`.
 The MIG uses create-before-destroy so Terraform can switch the global backend
 service to the replacement MIG before deleting the old one. The regional
 subnet, Cloud NAT/router, MIG, and log buckets are recreated; the global tenant

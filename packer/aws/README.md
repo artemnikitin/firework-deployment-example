@@ -2,9 +2,31 @@
 
 This document covers building the Firework node AMI in `packer/aws/`.
 
+## Architecture
+
+The template builds an **x86_64** AMI by default, matching the default
+`node_instance_type` in the data-plane stack (a virtual instance using nested
+virtualization rather than bare metal). Set `architecture = "arm64"` together
+with an arm64 `instance_type` and `source_ami_name` to build for bare-metal
+Graviton nodes instead.
+
+The architecture must be consistent across three places:
+
+| Setting | Location |
+| --- | --- |
+| `architecture` | `packer/aws/*.pkrvars.hcl` |
+| `node_ami_architecture` and `node_instance_type` | data-plane stack |
+| rootfs image set | S3 images bucket (`firework-gitops-example` builds both) |
+
+Host and guest architecture must match, so pointing an x86_64 node at an arm64
+rootfs bucket fails at microVM start, not at deploy time.
+
+All provisioning scripts in `packer/scripts/` resolve their downloads from
+`uname -m`, so they need no changes between architectures.
+
 ## What this AMI contains
 
-- Amazon Linux 2023 (ARM64)
+- Amazon Linux 2023 (x86_64 by default, arm64 supported)
 - Firecracker + jailer
 - Firecracker-compatible `vmlinux-5.10.x` kernel
 - `firework-agent` binary
@@ -32,7 +54,7 @@ The AMI ID is printed at the end of the build output.
 
 ## Agent Binary Download Behavior
 
-When `firework_agent_path` is empty, `../scripts/03-install-agent.sh` downloads `firework-agent-linux-arm64` from GitHub Releases:
+When `firework_agent_path` is empty, `../scripts/03-install-agent.sh` downloads the asset matching the builder architecture (`firework-agent-linux-amd64` or `firework-agent-linux-arm64`) from GitHub Releases:
 
 - `firework_agent_version = "latest"` uses the latest release
 - `firework_agent_version = "1.2.3"` and `"v1.2.3"` both resolve to tag `v1.2.3`

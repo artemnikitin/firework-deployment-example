@@ -16,16 +16,27 @@ variable "aws_region" {
   default = "us-east-1"
 }
 
+variable "architecture" {
+  type        = string
+  default     = "x86_64"
+  description = "Target architecture for the node AMI. Must match instance_type, source_ami_name, the data-plane node_instance_type, and the rootfs images in the S3 images bucket. Use arm64 to build for bare-metal Graviton nodes."
+
+  validation {
+    condition     = contains(["x86_64", "arm64"], var.architecture)
+    error_message = "The architecture variable must be either x86_64 or arm64."
+  }
+}
+
 variable "instance_type" {
   type        = string
-  default     = "t4g.large"
-  description = "Instance type for the Packer builder. Any ARM64 instance works — the build only installs binaries and does not run Firecracker. Metal instances are only required at runtime (data-plane stack). Avoid metal here: they take 15-20 min to launch/terminate."
+  default     = "t3.large"
+  description = "Instance type for the Packer builder. Any instance of the target architecture works — the build only installs binaries and does not run Firecracker. Use t4g.large when architecture = arm64. Avoid metal here: it takes 15-20 min to launch/terminate."
 }
 
 variable "source_ami_name" {
   type        = string
-  default     = "al2023-ami-2023.*-kernel-6.1-arm64"
-  description = "Name filter for the base AMI (Amazon Linux 2023, ARM64)"
+  default     = "al2023-ami-2023.*-kernel-6.1-x86_64"
+  description = "Name filter for the base AMI (Amazon Linux 2023). Use al2023-ami-2023.*-kernel-6.1-arm64 when architecture = arm64."
 }
 
 variable "source_ami_owner" {
@@ -47,7 +58,7 @@ variable "traefik_version" {
 variable "firework_agent_path" {
   type        = string
   default     = ""
-  description = "Local path to a pre-built firework-agent binary (linux/arm64). Required when no GitHub release exists. Build with: make build-linux-arm64"
+  description = "Local path to a pre-built firework-agent binary matching architecture. Required when no GitHub release exists. Build with: make build-linux-amd64 (or make build-linux-arm64)."
 }
 
 variable "firework_agent_version" {
@@ -103,7 +114,11 @@ variable "subnet_id" {
 }
 
 # -----------------------------------------------------------------------------
-# Source: Amazon EBS (ARM64 / Graviton)
+# Source: Amazon EBS
+#
+# The shared provisioning scripts in ../scripts resolve Firecracker, the guest
+# kernel, Traefik, and the firework-agent from uname -m, so they work for both
+# architectures without changes.
 # -----------------------------------------------------------------------------
 
 source "amazon-ebs" "firework_node" {
@@ -123,14 +138,14 @@ source "amazon-ebs" "firework_node" {
       name                = var.source_ami_name
       root-device-type    = "ebs"
       virtualization-type = "hvm"
-      architecture        = "arm64"
+      architecture        = var.architecture
     }
     most_recent = true
     owners      = [var.source_ami_owner]
   }
 
   ami_name        = "${var.ami_name_prefix}-{{timestamp}}"
-  ami_description = "Firework node AMI (arm64) with Firecracker ${var.firecracker_version} and firework-agent"
+  ami_description = "Firework node AMI (${var.architecture}) with Firecracker ${var.firecracker_version} and firework-agent"
 
   # Required when the account has no default VPC.
   vpc_id    = var.vpc_id != "" ? var.vpc_id : null
@@ -156,7 +171,7 @@ source "amazon-ebs" "firework_node" {
   tags = {
     Name                = "${var.ami_name_prefix}-{{timestamp}}"
     Base_AMI            = "{{ .SourceAMI }}"
-    Architecture        = "arm64"
+    Architecture        = var.architecture
     Firecracker_Version = var.firecracker_version
     Built_By            = "packer"
   }

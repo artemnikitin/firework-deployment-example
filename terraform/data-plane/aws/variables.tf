@@ -29,9 +29,71 @@ variable "vpc_cidr" {
 }
 
 variable "availability_zones" {
-  description = "Availability zones to deploy into"
+  description = <<-EOT
+    Availability zones to deploy into. Any number from 2 upwards works, in any
+    order, and the list can be changed later: each AZ's subnet CIDR is derived
+    from the AZ name, not from its position, so adding or removing a zone does
+    not renumber the others. Independent of node_count — the Auto Scaling Group
+    spreads whatever number of nodes you ask for across these zones.
+  EOT
   type        = list(string)
   default     = ["us-east-1a", "us-east-1c"]
+
+  validation {
+    # An Application Load Balancer requires subnets in at least two zones, and
+    # the ALB lives in these subnets. This is an AWS constraint, not a limit of
+    # this stack.
+    condition     = length(var.availability_zones) >= 2
+    error_message = "availability_zones must contain at least 2 zones: the ALB requires subnets in two availability zones."
+  }
+
+  validation {
+    condition     = length(distinct(var.availability_zones)) == length(var.availability_zones)
+    error_message = "availability_zones must not contain duplicates."
+  }
+
+  validation {
+    # Subnet CIDRs are derived from the trailing zone letter, so names must be
+    # of the standard <region><letter> form with a letter in a-h. Local Zone and
+    # Wavelength names (for example us-east-1-bos-1a) are not supported here.
+    condition     = alltrue([for az in var.availability_zones : can(regex("^[a-z]{2}-[a-z]+-[0-9][a-h]$", az))])
+    error_message = "Each availability_zones entry must look like us-east-1a, with a trailing zone letter in the range a-h. Local Zone and Wavelength zone names are not supported."
+  }
+}
+
+variable "node_network_placement" {
+  description = <<-EOT
+    Where Firecracker nodes are placed. "public" (default) puts nodes in the
+    public subnets with a public IP and internet gateway egress, creating no NAT
+    gateways — the cheapest option at demo scale. "private" keeps nodes in
+    private subnets behind NAT gateways. See the data-plane README for the
+    security trade-offs of "public", in particular that source/destination check
+    is disabled on these nodes.
+  EOT
+  type        = string
+  default     = "public"
+
+  validation {
+    condition     = contains(["public", "private"], var.node_network_placement)
+    error_message = "node_network_placement must be either \"public\" or \"private\"."
+  }
+}
+
+variable "nat_gateway_mode" {
+  description = <<-EOT
+    NAT gateway topology when node_network_placement = "private". "per_az"
+    (default) creates one gateway per availability zone and keeps node egress
+    alive through a single-AZ failure. "single" creates one gateway for all
+    private subnets, which is cheaper but introduces an AZ dependency and
+    cross-AZ data charges for non-S3 egress. Ignored in "public" placement.
+  EOT
+  type        = string
+  default     = "per_az"
+
+  validation {
+    condition     = contains(["per_az", "single"], var.nat_gateway_mode)
+    error_message = "nat_gateway_mode must be either \"per_az\" or \"single\"."
+  }
 }
 
 # --- S3 (pre-existing, managed outside this stack) ---
@@ -126,9 +188,28 @@ variable "step_ca_renew_expires_in" {
 # --- EC2 / Nodes ---
 
 variable "node_instance_type" {
-  description = "EC2 instance type for Firecracker nodes (must support bare-metal KVM)"
+  description = <<-EOT
+    EC2 instance type for Firecracker nodes. Must expose /dev/kvm, which means
+    either a bare-metal instance or a virtual instance type that supports nested
+    virtualization (see node_nested_virtualization). The default is a virtual
+    x86_64 instance because bare metal forces a 64 vCPU purchase and costs
+    roughly six times more per hour for this demo.
+  EOT
   type        = string
-  default     = "c6g.metal"
+  default     = "c8i.2xlarge"
+}
+
+variable "node_nested_virtualization" {
+  description = <<-EOT
+    Enable the nested virtualization CPU option so a virtual (non-bare-metal)
+    instance exposes /dev/kvm to Firecracker. Required for the default
+    node_instance_type. Set to false when node_instance_type is a bare-metal
+    type such as c6g.metal, which exposes /dev/kvm natively and rejects this
+    option. Supported on Intel families only (C8i, M8i, R8i and their id/flex
+    variants, X8i, C7i, M7i, R7i, C7i-flex, M7i-flex, I7i) — not on Graviton.
+  EOT
+  type        = bool
+  default     = true
 }
 
 variable "node_ami_id" {
@@ -150,13 +231,13 @@ variable "node_ami_owners" {
 }
 
 variable "node_ami_architecture" {
-  description = "Architecture filter used when resolving AMI by name pattern."
+  description = "Architecture filter used when resolving AMI by name pattern. Must match the architecture the node AMI was built for and the rootfs images in s3_images_bucket_id."
   type        = string
-  default     = "arm64"
+  default     = "x86_64"
 
   validation {
     condition     = var.node_ami_architecture != ""
-    error_message = "node_ami_architecture must be non-empty (for example arm64)."
+    error_message = "node_ami_architecture must be non-empty (for example x86_64 or arm64)."
   }
 }
 

@@ -12,12 +12,27 @@ resource "aws_launch_template" "node" {
     arn = aws_iam_instance_profile.node.arn
   }
 
+  # Virtual instance types need the nested virtualization CPU option to expose
+  # /dev/kvm to Firecracker. Bare-metal types expose it natively and reject the
+  # option, so it is opt-out via node_nested_virtualization.
+  dynamic "cpu_options" {
+    for_each = var.node_nested_virtualization ? [1] : []
+
+    content {
+      nested_virtualization = "enabled"
+    }
+  }
+
   # source_dest_check is NOT supported in aws_launch_template.network_interfaces
   # (the Terraform provider omits this attribute). It is disabled at instance
   # launch time via user-data (aws ec2 modify-instance-attribute). This is
   # required for VPC routing of east-west VM traffic between nodes.
+  #
+  # Note that in public placement this means a node can emit packets with
+  # arbitrary source addresses straight to the internet gateway. See the
+  # data-plane README.
   network_interfaces {
-    associate_public_ip_address = false
+    associate_public_ip_address = local.node_subnets_are_public
     security_groups             = [aws_security_group.nodes.id]
     delete_on_termination       = true
   }
@@ -108,7 +123,7 @@ resource "aws_autoscaling_group" "nodes" {
   desired_capacity    = var.node_count
   min_size            = var.node_count
   max_size            = var.node_count
-  vpc_zone_identifier = aws_subnet.private[*].id
+  vpc_zone_identifier = local.node_subnet_ids
   target_group_arns   = [aws_lb_target_group.traefik.arn]
 
   health_check_type         = "ELB"
@@ -117,16 +132,36 @@ resource "aws_autoscaling_group" "nodes" {
   # Skip the graceful drain (desired→0 then wait). The ASG and its
   # instances are deleted in one API call. Terraform still waits for
   # the ASG to disappear, which requires all instances to terminate.
-  # c6g.metal can take 15-20 min, so raise the delete timeout below.
+  # Virtual instances terminate in 1-2 min, but bare-metal types such as
+  # c6g.metal can take 15-20 min, so the delete timeout stays generous.
   force_delete = true
 
   timeouts {
     delete = "30m"
   }
 
+  # Pinned to the concrete latest version rather than "$Latest": an instance
+  # refresh does not start when the ASG references "$Latest", so launch-template
+  # changes would silently never reach running instances.
   launch_template {
     id      = aws_launch_template.node.id
-    version = "$Latest"
+    version = aws_launch_template.node.latest_version
+  }
+
+  # Without this, changing node_network_placement, node_instance_type, or the
+  # AMI updates the launch template but leaves running instances untouched.
+  # That is dangerous for the private -> public migration in particular: the
+  # NAT gateways and private default routes are removed in the same apply, so
+  # un-refreshed instances would keep their private subnet and lose egress.
+  instance_refresh {
+    strategy = "Rolling"
+
+    preferences {
+      # node_count defaults to 1, so a rolling refresh has to be allowed to
+      # take the only instance out of service.
+      min_healthy_percentage = 0
+      instance_warmup        = 600
+    }
   }
 
   tag {
@@ -139,13 +174,16 @@ resource "aws_autoscaling_group" "nodes" {
     create_before_destroy = true
   }
 
-  # Do not launch private instances until their NAT-backed route tables are
-  # associated. User-data still retries because route/NAT readiness can be
-  # transient, but this prevents the normal apply path from racing the NAT
-  # gateway provisioning entirely.
+  # Do not launch instances until their egress route tables are associated and
+  # the S3 gateway endpoint exists. User-data still retries because route/NAT
+  # readiness can be transient, but this prevents the normal apply path from
+  # racing egress provisioning entirely. Both associations are listed because
+  # either one can carry node egress depending on node_network_placement.
   depends_on = [
     aws_efs_mount_target.shared,
     aws_route_table_association.private,
+    aws_route_table_association.public,
+    aws_vpc_endpoint.s3,
   ]
 
 }

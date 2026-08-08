@@ -3,8 +3,10 @@ terraform {
 
   required_providers {
     aws = {
+      # 6.33+ is required for cpu_options.nested_virtualization on
+      # aws_launch_template.
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = "~> 6.33"
     }
   }
 }

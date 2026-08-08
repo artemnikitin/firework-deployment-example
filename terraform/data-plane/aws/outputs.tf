@@ -113,3 +113,29 @@ output "shared_storage_access_point_id" {
   description = "Optional EFS access point mounted by Firework nodes"
   value       = var.enable_shared_storage && var.shared_storage_use_access_point ? aws_efs_access_point.shared[0].id : null
 }
+
+output "node_network_placement" {
+  description = "Whether Firecracker nodes run in public or private subnets"
+  value       = var.node_network_placement
+}
+
+output "node_subnet_ids" {
+  description = "Subnets the node Auto Scaling Group launches into"
+  value       = local.node_subnet_ids
+}
+
+output "s3_vpc_endpoint_id" {
+  description = "S3 gateway VPC endpoint serving node image, config, and package traffic"
+  value       = aws_vpc_endpoint.s3.id
+}
+
+output "nat_gateway_ids" {
+  description = "NAT gateway IDs. Empty in public node placement, where no NAT gateways are created."
+  # A for expression rather than a [*] splat. In public placement the NAT
+  # gateway count is zero and nothing is in state, and Terraform then evaluates
+  # the resource as an object rather than an empty list. The splat wraps that
+  # object in a single-element list and fails with "This object does not have
+  # an attribute named id" during destroy. A for expression handles the empty
+  # case correctly.
+  value = [for gateway in aws_nat_gateway.main : gateway.id]
+}
