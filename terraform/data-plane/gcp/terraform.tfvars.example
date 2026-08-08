@@ -8,7 +8,7 @@ dns_zone_name = "firework-gcp"
 # Single source of truth for wildcard DNS, the wildcard TLS certificate, and the
 # agent ingress_domain. Services route as <subdomain>.<base_domain>.
 base_domain       = "gcp.example.com"
-images_bucket_name = "firework-images-amd64-my-gcp-project"
+images_bucket_name = "firework-images-my-gcp-project"
 
 # Default false: Private Google Access and registry peering are enough for the
 # demo. Enable only when guest workloads or node debugging need public egress.
