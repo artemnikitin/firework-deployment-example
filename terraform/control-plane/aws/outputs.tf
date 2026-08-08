@@ -74,22 +74,22 @@ output "ecs_cluster_name" {
 
 output "events_service_name" {
   description = "ECS service name serving the events role"
-  value       = var.controlplane_service_mode == "all" ? local.all_container_name : local.events_service_name
+  value       = var.controlplane_service_mode == "all" ? local.all_service_name : local.events_service_name
 }
 
 output "registry_service_name" {
   description = "ECS service name serving the registry role"
-  value       = var.controlplane_service_mode == "all" ? local.all_container_name : local.registry_service_name
+  value       = var.controlplane_service_mode == "all" ? local.all_service_name : local.registry_service_name
 }
 
 output "controller_service_name" {
   description = "ECS service name serving the controller role"
-  value       = var.controlplane_service_mode == "all" ? local.all_container_name : local.controller_service_name
+  value       = var.controlplane_service_mode == "all" ? local.all_service_name : local.controller_service_name
 }
 
 output "api_service_name" {
   description = "ECS service name serving the read-only API role"
-  value       = var.controlplane_service_mode == "all" ? local.all_container_name : local.api_service_name
+  value       = var.controlplane_service_mode == "all" ? local.all_service_name : local.api_service_name
 }
 
 output "controlplane_service_name" {
@@ -100,7 +100,7 @@ output "controlplane_service_name" {
 output "controlplane_service_names" {
   description = "ECS service names serving the control plane roles"
   value = var.controlplane_service_mode == "all" ? [
-    local.all_container_name,
+    local.all_service_name,
     ] : [
     local.events_service_name,
     local.registry_service_name,

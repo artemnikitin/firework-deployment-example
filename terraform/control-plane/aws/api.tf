@@ -127,7 +127,7 @@ resource "aws_ecs_task_definition" "api" {
 resource "aws_ecs_service" "api" {
   count = var.controlplane_service_mode == "split" ? 1 : 0
 
-  name                 = "${var.project_name}-controlplane-api"
+  name                 = local.api_service_name
   cluster              = aws_ecs_cluster.controlplane.id
   task_definition      = aws_ecs_task_definition.api[0].arn
   desired_count        = var.api_desired_count

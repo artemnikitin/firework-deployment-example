@@ -628,7 +628,7 @@ resource "aws_ecs_task_definition" "controller" {
 resource "aws_ecs_service" "events" {
   count = var.controlplane_service_mode == "split" ? 1 : 0
 
-  name                 = "${var.project_name}-controlplane-events"
+  name                 = local.events_service_name
   cluster              = aws_ecs_cluster.controlplane.id
   task_definition      = aws_ecs_task_definition.events[0].arn
   desired_count        = var.events_desired_count
@@ -664,7 +664,7 @@ resource "aws_ecs_service" "events" {
 resource "aws_ecs_service" "registry" {
   count = var.controlplane_service_mode == "split" ? 1 : 0
 
-  name                 = "${var.project_name}-controlplane-registry"
+  name                 = local.registry_service_name
   cluster              = aws_ecs_cluster.controlplane.id
   task_definition      = aws_ecs_task_definition.registry[0].arn
   desired_count        = var.registry_desired_count
@@ -700,7 +700,7 @@ resource "aws_ecs_service" "registry" {
 resource "aws_ecs_service" "controller" {
   count = var.controlplane_service_mode == "split" ? 1 : 0
 
-  name                 = "${var.project_name}-controlplane-controller"
+  name                 = local.controller_service_name
   cluster              = aws_ecs_cluster.controlplane.id
   task_definition      = aws_ecs_task_definition.controller[0].arn
   desired_count        = var.controller_desired_count
@@ -763,7 +763,7 @@ resource "aws_ecs_task_definition" "all" {
 resource "aws_ecs_service" "all" {
   count = var.controlplane_service_mode == "all" ? 1 : 0
 
-  name                 = "${var.project_name}-controlplane"
+  name                 = local.all_service_name
   cluster              = aws_ecs_cluster.controlplane.id
   task_definition      = aws_ecs_task_definition.all[0].arn
   desired_count        = var.controlplane_desired_count

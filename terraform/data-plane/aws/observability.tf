@@ -9,7 +9,7 @@ locals {
   node_firecracker_log_group_name = "/firework/${var.project_name}/node/firecracker"
   agent_metric_namespace          = "Firework/${var.project_name}"
   alb_access_logs_prefix          = "alb"
-  controlplane_cluster_name       = "${var.project_name}-controlplane"
+  controlplane_cluster_name       = try(local.control_plane_outputs.ecs_cluster_name, "${var.project_name}-controlplane")
   controlplane_service_names      = try(local.control_plane_outputs.controlplane_service_names, ["${var.project_name}-controlplane"])
   # The combined service is the demo default; retain the pre-PR split-mode
   # fallback for an out-of-order data-plane upgrade.

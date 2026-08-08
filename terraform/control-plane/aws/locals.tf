@@ -11,10 +11,11 @@ locals {
   registry_service_name       = "${var.project_name}-controlplane-registry"
   controller_service_name     = "${var.project_name}-controlplane-controller"
   api_service_name            = "${var.project_name}-controlplane-api"
-  controlplane_service_name   = var.controlplane_service_mode == "all" ? local.all_container_name : local.events_service_name
+  all_service_name            = "${var.project_name}-controlplane"
+  controlplane_service_name   = var.controlplane_service_mode == "all" ? local.all_service_name : local.events_service_name
   controlplane_log_group_name = var.controlplane_service_mode == "all" ? "/ecs/${var.project_name}/controlplane" : "/ecs/${var.project_name}/controlplane-controller"
   controlplane_dashboard_services = var.controlplane_service_mode == "all" ? [
-    { name = local.all_container_name, label = "all roles" },
+    { name = local.all_service_name, label = "all roles" },
     ] : [
     { name = local.events_service_name, label = "events" },
     { name = local.registry_service_name, label = "registry" },
