@@ -78,19 +78,31 @@ if [[ -n "$profile" ]]; then
   aws_args+=(--profile "$profile")
 fi
 
-volume_ids=()
-while IFS= read -r volume_id; do
-  [[ -z "$volume_id" || "$volume_id" == "None" ]] && continue
-  volume_ids+=("$volume_id")
-done < <(
+# Capture the listing before reading it. `set -e` and `pipefail` do not apply to
+# a process substitution, so listing straight into `done < <(aws ...)` turns any
+# API failure - missing profile, expired credentials, denied permission, wrong
+# region - into an empty list, which then reports "no orphaned volumes found"
+# and exits 0. A failed listing is not evidence that nothing needs cleaning, so
+# it must be fatal. The AWS CLI exits 0 with empty output when a filter simply
+# matches nothing, so a non-zero status here is a genuine failure.
+if ! volume_id_output=$(
   aws "${aws_args[@]}" ec2 describe-volumes \
     --filters \
       "Name=status,Values=available" \
       "Name=tag:Retention,Values=manual" \
       "Name=tag:Name,Values=${project_name}-node-volume" \
     --query 'Volumes[].VolumeId' \
-    --output text | tr '\t' '\n'
-)
+    --output text
+); then
+  echo "ERROR: could not list EBS volumes in $region. Refusing to report 'none found' from a failed lookup." >&2
+  exit 1
+fi
+
+volume_ids=()
+while IFS= read -r volume_id; do
+  [[ -z "$volume_id" || "$volume_id" == "None" ]] && continue
+  volume_ids+=("$volume_id")
+done < <(printf '%s\n' "$volume_id_output" | tr '\t' '\n')
 
 if ((${#volume_ids[@]} == 0)); then
   echo "No unattached retained Firework volumes found for project $project_name in $region."

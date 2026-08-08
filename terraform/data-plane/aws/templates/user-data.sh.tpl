@@ -9,7 +9,7 @@ set -euo pipefail
 #   1. Gets the instance ID from EC2 metadata
 #   2. Downloads rootfs images from S3
 #   3. Writes the node-specific agent config (with instance ID as node name)
-#   4. Optionally bootstraps node certs from step-ca (AWS IID)
+#   4. Bootstraps node certificates with the registry bootstrap token
 #   5. Configures and starts the CloudWatch Agent (logs + Prometheus metrics)
 #   6. Starts Traefik and the firework-agent
 
@@ -20,11 +20,6 @@ S3_CONFIGS_BUCKET="${s3_configs_bucket}"
 S3_CONFIGS_PREFIX="${s3_configs_prefix}"
 REGISTRY_URL="${registry_url}"
 REGISTRY_SERVER_NAME="${registry_server_name}"
-STEP_CA_URL="${step_ca_url}"
-STEP_CA_ROOT_CA_SECRET_ARN="${step_ca_root_ca_secret_arn}"
-STEP_CA_PROVISIONER="${step_ca_provisioner}"
-STEP_CA_SUBJECT_SUFFIX="${step_ca_subject_suffix}"
-STEP_CA_RENEW_EXPIRES_IN="${step_ca_renew_expires_in}"
 REGISTRY_CLIENT_CA_SECRET_ARN="${registry_client_ca_secret_arn}"
 REGISTRY_BOOTSTRAP_TOKEN_SECRET_ARN="${registry_bootstrap_token_secret_arn}"
 VM_SUBNET="${vm_subnet}"
@@ -45,7 +40,6 @@ REGISTRY_CA_FILE="/etc/firework/pki/node-ca.crt"
 REGISTRY_CERT_FILE="/etc/firework/pki/node.crt"
 REGISTRY_KEY_FILE="/etc/firework/pki/node.key"
 REGISTRY_BOOTSTRAP_TOKEN=""
-STEP_BIN=""
 
 mkdir -p "$IMAGES_DIR" /var/log
 
@@ -322,31 +316,6 @@ if [ -x /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl ]; then
     -s || true
 fi
 
-install_step_cli() {
-  if command -v step >/dev/null 2>&1; then
-    STEP_BIN="$(command -v step)"
-    return
-  fi
-
-  cat >/etc/yum.repos.d/smallstep.repo <<'EOF'
-[smallstep]
-name=Smallstep
-baseurl=https://packages.smallstep.com/stable/fedora/
-enabled=1
-repo_gpgcheck=0
-gpgcheck=1
-gpgkey=https://packages.smallstep.com/keys/smallstep-0x889B19391F774443.gpg
-EOF
-
-  retry "refresh package metadata for step CLI" 10 5 dnf makecache -y
-  retry "install step CLI" 10 5 dnf install -y step-cli
-  STEP_BIN="$(command -v step)"
-  if [ -z "$STEP_BIN" ]; then
-    echo "ERROR: step CLI install failed"
-    exit 1
-  fi
-}
-
 # --- 1. Download rootfs images from S3 ---
 echo "==> Downloading rootfs images from s3://$S3_IMAGES_BUCKET/"
 retry "download rootfs images" 20 5 \
@@ -365,64 +334,21 @@ if [ -n "$REGISTRY_URL" ]; then
 
   mkdir -p /etc/firework/pki
 
-  REGISTRY_CA_SECRET_ARN="$REGISTRY_CLIENT_CA_SECRET_ARN"
-  if [ -n "$STEP_CA_ROOT_CA_SECRET_ARN" ]; then
-    REGISTRY_CA_SECRET_ARN="$STEP_CA_ROOT_CA_SECRET_ARN"
-  fi
-  if [ -z "$REGISTRY_CA_SECRET_ARN" ]; then
+  if [ -z "$REGISTRY_CLIENT_CA_SECRET_ARN" ]; then
     echo "ERROR: registry_url is set but no CA secret ARN is configured"
-    echo "       Set step_ca_root_ca_secret_arn (preferred) or registry_client_ca_secret_arn (legacy)."
+    echo "       Set registry_client_ca_secret_arn in the control-plane outputs."
     exit 1
   fi
 
   retry "download registry CA secret" 20 5 \
     aws secretsmanager get-secret-value \
-      --secret-id "$REGISTRY_CA_SECRET_ARN" \
+      --secret-id "$REGISTRY_CLIENT_CA_SECRET_ARN" \
       --region "$S3_REGION" \
       --query SecretString \
       --output text > "$REGISTRY_CA_FILE"
   chmod 0644 "$REGISTRY_CA_FILE"
 
-  if [ -n "$STEP_CA_URL" ]; then
-    echo "==> Bootstrapping node certificate via step-ca AWS IID provisioner"
-    install_step_cli
-
-    STEP_CA_ROOT_FINGERPRINT=$("$STEP_BIN" certificate fingerprint "$REGISTRY_CA_FILE")
-    retry "bootstrap step-ca client" 10 5 \
-      "$STEP_BIN" ca bootstrap \
-        --ca-url "$STEP_CA_URL" \
-        --fingerprint "$STEP_CA_ROOT_FINGERPRINT" \
-        --install \
-        --force
-
-    STEP_NODE_SUBJECT="$INSTANCE_ID$STEP_CA_SUBJECT_SUFFIX"
-    retry "issue node certificate" 10 5 \
-      "$STEP_BIN" ca certificate "$STEP_NODE_SUBJECT" \
-        "$REGISTRY_CERT_FILE" "$REGISTRY_KEY_FILE" \
-        --provisioner "$STEP_CA_PROVISIONER" \
-        --ca-url "$STEP_CA_URL" \
-        --root "$REGISTRY_CA_FILE" \
-        --force
-    chmod 0600 "$REGISTRY_KEY_FILE"
-
-    cat >/etc/systemd/system/firework-step-renew.service <<EOF
-[Unit]
-Description=Renew Firework node certificate via step-ca
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=$STEP_BIN ca renew --daemon --expires-in $STEP_CA_RENEW_EXPIRES_IN --force --ca-url $STEP_CA_URL --root $REGISTRY_CA_FILE --exec "systemctl restart firework-agent" $REGISTRY_CERT_FILE $REGISTRY_KEY_FILE
-Restart=always
-RestartSec=5s
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    systemctl daemon-reload
-    systemctl enable --now firework-step-renew.service
-  elif [ -n "$REGISTRY_BOOTSTRAP_TOKEN_SECRET_ARN" ]; then
+  if [ -n "$REGISTRY_BOOTSTRAP_TOKEN_SECRET_ARN" ]; then
     REGISTRY_BOOTSTRAP_TOKEN=$(retry "download registry bootstrap token" 20 5 \
       aws secretsmanager get-secret-value \
         --secret-id "$REGISTRY_BOOTSTRAP_TOKEN_SECRET_ARN" \
@@ -430,7 +356,7 @@ EOF
         --query SecretString \
         --output text)
   else
-    echo "ERROR: registry_url is set but neither step_ca_url nor registry_bootstrap_token_secret_arn is configured"
+    echo "ERROR: registry_url is set but registry_bootstrap_token_secret_arn is not configured"
     exit 1
   fi
 fi

@@ -7,7 +7,6 @@ locals {
   node_configs_key_pattern  = local.node_configs_prefix_clean == "" ? "nodes/*" : "${local.node_configs_prefix_clean}/nodes/*"
   node_configs_object_arn   = "${local.effective_s3_configs_bucket_arn}/${local.node_configs_key_pattern}"
   node_secret_arns = distinct(compact([
-    local.effective_step_ca_root_ca_secret_arn,
     local.effective_registry_client_ca_secret_arn,
     local.effective_registry_bootstrap_token_secret_arn,
   ]))

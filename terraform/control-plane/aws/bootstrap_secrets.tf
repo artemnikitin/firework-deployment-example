@@ -3,9 +3,9 @@
 # -----------------------------------------------------------------------------
 
 locals {
-  auto_generate_registry_client_ca = var.auto_create_demo_secrets && var.registry_client_ca_secret_arn == "" && !(var.enable_step_ca && var.step_ca_root_ca_secret_arn != "")
-  auto_generate_legacy_enrollment  = var.auto_create_demo_secrets && !var.enable_step_ca && (var.registry_enrollment_ca_secret_arn == "" || var.registry_enrollment_ca_key_secret_arn == "" || var.registry_bootstrap_token_secret_arn == "")
-  auto_generate_tls_material       = var.auto_create_demo_secrets && (var.events_tls_cert_secret_arn == "" || var.events_tls_key_secret_arn == "" || var.registry_tls_cert_secret_arn == "" || var.registry_tls_key_secret_arn == "" || local.auto_generate_registry_client_ca || local.auto_generate_legacy_enrollment)
+  auto_generate_registry_client_ca   = var.auto_create_demo_secrets && var.registry_client_ca_secret_arn == ""
+  auto_generate_bootstrap_enrollment = var.auto_create_demo_secrets && (var.registry_enrollment_ca_secret_arn == "" || var.registry_enrollment_ca_key_secret_arn == "" || var.registry_bootstrap_token_secret_arn == "")
+  auto_generate_tls_material         = var.auto_create_demo_secrets && (var.events_tls_cert_secret_arn == "" || var.events_tls_key_secret_arn == "" || var.registry_tls_cert_secret_arn == "" || var.registry_tls_key_secret_arn == "" || local.auto_generate_registry_client_ca || local.auto_generate_bootstrap_enrollment)
 }
 
 resource "tls_private_key" "auto_root_ca" {
@@ -214,71 +214,50 @@ resource "aws_secretsmanager_secret_version" "auto_registry_client_ca" {
 }
 
 resource "aws_secretsmanager_secret" "auto_registry_enrollment_ca" {
-  count = local.auto_generate_legacy_enrollment && var.registry_enrollment_ca_secret_arn == "" ? 1 : 0
+  count = local.auto_generate_bootstrap_enrollment && var.registry_enrollment_ca_secret_arn == "" ? 1 : 0
 
   name_prefix = "${var.project_name}-registry-enroll-ca-cert-"
-  description = "Auto-generated legacy enrollment CA certificate PEM for ${var.project_name} control-plane"
+  description = "Auto-generated bootstrap-token enrollment CA certificate PEM for ${var.project_name} control-plane"
 }
 
 resource "aws_secretsmanager_secret_version" "auto_registry_enrollment_ca" {
-  count = local.auto_generate_legacy_enrollment && var.registry_enrollment_ca_secret_arn == "" ? 1 : 0
+  count = local.auto_generate_bootstrap_enrollment && var.registry_enrollment_ca_secret_arn == "" ? 1 : 0
 
   secret_id     = aws_secretsmanager_secret.auto_registry_enrollment_ca[0].id
   secret_string = tls_self_signed_cert.auto_root_ca[0].cert_pem
 }
 
 resource "aws_secretsmanager_secret" "auto_registry_enrollment_ca_key" {
-  count = local.auto_generate_legacy_enrollment && var.registry_enrollment_ca_key_secret_arn == "" ? 1 : 0
+  count = local.auto_generate_bootstrap_enrollment && var.registry_enrollment_ca_key_secret_arn == "" ? 1 : 0
 
   name_prefix = "${var.project_name}-registry-enroll-ca-key-"
-  description = "Auto-generated legacy enrollment CA private key PEM for ${var.project_name} control-plane"
+  description = "Auto-generated bootstrap-token enrollment CA private key PEM for ${var.project_name} control-plane"
 }
 
 resource "aws_secretsmanager_secret_version" "auto_registry_enrollment_ca_key" {
-  count = local.auto_generate_legacy_enrollment && var.registry_enrollment_ca_key_secret_arn == "" ? 1 : 0
+  count = local.auto_generate_bootstrap_enrollment && var.registry_enrollment_ca_key_secret_arn == "" ? 1 : 0
 
   secret_id     = aws_secretsmanager_secret.auto_registry_enrollment_ca_key[0].id
   secret_string = tls_private_key.auto_root_ca[0].private_key_pem
 }
 
 resource "random_password" "auto_registry_bootstrap_token" {
-  count = local.auto_generate_legacy_enrollment && var.registry_bootstrap_token_secret_arn == "" ? 1 : 0
+  count = local.auto_generate_bootstrap_enrollment && var.registry_bootstrap_token_secret_arn == "" ? 1 : 0
 
   length  = 40
   special = false
 }
 
 resource "aws_secretsmanager_secret" "auto_registry_bootstrap_token" {
-  count = local.auto_generate_legacy_enrollment && var.registry_bootstrap_token_secret_arn == "" ? 1 : 0
+  count = local.auto_generate_bootstrap_enrollment && var.registry_bootstrap_token_secret_arn == "" ? 1 : 0
 
   name_prefix = "${var.project_name}-registry-bootstrap-token-"
-  description = "Auto-generated legacy registry bootstrap token for ${var.project_name} control-plane"
+  description = "Auto-generated registry bootstrap token for ${var.project_name} control-plane"
 }
 
 resource "aws_secretsmanager_secret_version" "auto_registry_bootstrap_token" {
-  count = local.auto_generate_legacy_enrollment && var.registry_bootstrap_token_secret_arn == "" ? 1 : 0
+  count = local.auto_generate_bootstrap_enrollment && var.registry_bootstrap_token_secret_arn == "" ? 1 : 0
 
   secret_id     = aws_secretsmanager_secret.auto_registry_bootstrap_token[0].id
   secret_string = random_password.auto_registry_bootstrap_token[0].result
-}
-
-resource "random_password" "auto_step_ca_password" {
-  count = var.auto_create_demo_secrets && var.enable_step_ca && var.step_ca_password_secret_arn == "" ? 1 : 0
-
-  length  = 40
-  special = false
-}
-
-resource "aws_secretsmanager_secret" "auto_step_ca_password" {
-  count = var.auto_create_demo_secrets && var.enable_step_ca && var.step_ca_password_secret_arn == "" ? 1 : 0
-
-  name_prefix = "${var.project_name}-step-ca-password-"
-  description = "Auto-generated step-ca password for ${var.project_name} control-plane"
-}
-
-resource "aws_secretsmanager_secret_version" "auto_step_ca_password" {
-  count = var.auto_create_demo_secrets && var.enable_step_ca && var.step_ca_password_secret_arn == "" ? 1 : 0
-
-  secret_id     = aws_secretsmanager_secret.auto_step_ca_password[0].id
-  secret_string = random_password.auto_step_ca_password[0].result
 }

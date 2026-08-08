@@ -130,12 +130,6 @@ variable "registry_listener_port" {
   default     = 9443
 }
 
-variable "registry_internal" {
-  description = "Whether the registry NLB is internal-only."
-  type        = bool
-  default     = false
-}
-
 variable "events_acm_certificate_arn" {
   description = "Optional ACM certificate ARN used by the events HTTPS ALB listener. If empty, a certificate can be auto-created by setting events_domain_name."
   type        = string
@@ -212,7 +206,7 @@ variable "controlplane_image_pull_secret_arn" {
 }
 
 variable "auto_create_demo_secrets" {
-  description = "When true, create demo Secrets Manager secrets for missing control-plane inputs (webhook secret, TLS certs/keys, registry CA, and legacy enrollment material)."
+  description = "When true, create demo Secrets Manager secrets for missing control-plane inputs (webhook secret, TLS certs/keys, registry CA, and bootstrap-token enrollment material)."
   type        = bool
   default     = true
 }
@@ -221,6 +215,35 @@ variable "auto_generated_tls_validity_hours" {
   description = "Validity period (hours) for auto-generated demo TLS certificates."
   type        = number
   default     = 8760
+}
+
+variable "controlplane_service_mode" {
+  description = "Control-plane ECS layout. 'all' runs every role in one service (the demo default); 'split' preserves one service per role."
+  type        = string
+  default     = "all"
+
+  validation {
+    condition     = contains(["all", "split"], var.controlplane_service_mode)
+    error_message = "controlplane_service_mode must be either \"all\" or \"split\"."
+  }
+}
+
+variable "controlplane_desired_count" {
+  description = "Desired task count for the combined all-role control-plane ECS service."
+  type        = number
+  default     = 1
+}
+
+variable "controlplane_task_cpu" {
+  description = "CPU units for tasks in the combined all-role control-plane ECS service."
+  type        = number
+  default     = 1024
+}
+
+variable "controlplane_task_memory" {
+  description = "Memory (MiB) for tasks in the combined all-role control-plane ECS service."
+  type        = number
+  default     = 2048
 }
 
 variable "events_desired_count" {
@@ -352,21 +375,21 @@ variable "registry_client_ca_secret_arn" {
 }
 
 variable "registry_enrollment_ca_secret_arn" {
-  description = "Optional Secrets Manager ARN containing enrollment CA certificate PEM (required for legacy bootstrap-token enrollment; auto-generated when missing and auto_create_demo_secrets=true)."
+  description = "Optional Secrets Manager ARN containing enrollment CA certificate PEM (required for bootstrap-token enrollment; auto-generated when missing and auto_create_demo_secrets=true)."
   type        = string
   sensitive   = true
   default     = ""
 }
 
 variable "registry_enrollment_ca_key_secret_arn" {
-  description = "Optional Secrets Manager ARN containing enrollment CA private key PEM (required for legacy bootstrap-token enrollment; auto-generated when missing and auto_create_demo_secrets=true)."
+  description = "Optional Secrets Manager ARN containing enrollment CA private key PEM (required for bootstrap-token enrollment; auto-generated when missing and auto_create_demo_secrets=true)."
   type        = string
   sensitive   = true
   default     = ""
 }
 
 variable "registry_bootstrap_token_secret_arn" {
-  description = "Optional Secrets Manager ARN containing bootstrap token used by nodes for first enrollment (legacy mode; auto-generated when missing and auto_create_demo_secrets=true)."
+  description = "Optional Secrets Manager ARN containing bootstrap token used by nodes for first enrollment (auto-generated when missing and auto_create_demo_secrets=true)."
   type        = string
   sensitive   = true
   default     = ""
@@ -379,7 +402,7 @@ variable "registry_bootstrap_node_id" {
 }
 
 variable "registry_node_cert_ttl" {
-  description = "TTL for node certificates issued by enrollment CA."
+  description = "TTL for node certificates issued by the bootstrap-token enrollment CA."
   type        = string
   default     = "24h"
 }
@@ -388,139 +411,6 @@ variable "registry_allowed_cidrs" {
   description = "CIDR blocks allowed to connect to registry tasks."
   type        = list(string)
   default     = ["0.0.0.0/0"]
-}
-
-variable "enable_step_ca" {
-  description = "When true, deploy an additional step-ca PKI service on ECS/Fargate."
-  type        = bool
-  default     = false
-}
-
-variable "step_ca_image" {
-  description = "Container image for step-ca (for example smallstep/step-ca:latest)."
-  type        = string
-  default     = "smallstep/step-ca:latest"
-}
-
-variable "step_ca_image_pull_secret_arn" {
-  description = "Optional Secrets Manager ARN for private registry credentials used by the step-ca image."
-  type        = string
-  default     = ""
-}
-
-variable "step_ca_password_secret_arn" {
-  description = "Optional Secrets Manager ARN containing the step-ca password used to encrypt/decrypt CA keys. If empty and auto_create_demo_secrets=true, one is generated."
-  type        = string
-  sensitive   = true
-  default     = ""
-}
-
-variable "step_ca_internal" {
-  description = "Whether the step-ca NLB is internal-only."
-  type        = bool
-  default     = false
-}
-
-variable "step_ca_listener_port" {
-  description = "TCP listener port for the step-ca NLB."
-  type        = number
-  default     = 9000
-}
-
-variable "step_ca_task_port" {
-  description = "Container port exposed by the step-ca task."
-  type        = number
-  default     = 9000
-}
-
-variable "step_ca_listen_addr" {
-  description = "Listen address for step-ca inside the container."
-  type        = string
-  default     = ":9000"
-}
-
-variable "step_ca_allowed_cidrs" {
-  description = "CIDR blocks allowed to connect to the step-ca task."
-  type        = list(string)
-  default     = ["0.0.0.0/0"]
-}
-
-variable "step_ca_desired_count" {
-  description = "Desired task count for the step-ca ECS service. Keep this at 1; step-ca state is single-writer in this setup."
-  type        = number
-  default     = 1
-
-  validation {
-    condition     = var.step_ca_desired_count >= 0 && var.step_ca_desired_count <= 1
-    error_message = "step_ca_desired_count must be 0 or 1 in this deployment."
-  }
-}
-
-variable "step_ca_task_cpu" {
-  description = "CPU units for step-ca tasks."
-  type        = number
-  default     = 256
-}
-
-variable "step_ca_task_memory" {
-  description = "Memory (MiB) for step-ca tasks."
-  type        = number
-  default     = 512
-}
-
-variable "step_ca_name" {
-  description = "Display name used when initializing step-ca."
-  type        = string
-  default     = "Firework Step CA"
-}
-
-variable "step_ca_bootstrap_provisioner_name" {
-  description = "Initial local admin provisioner name used to bootstrap step-ca config."
-  type        = string
-  default     = "bootstrap-admin"
-}
-
-variable "step_ca_aws_provisioner_name" {
-  description = "AWS IID provisioner name added to step-ca."
-  type        = string
-  default     = "aws-iid"
-}
-
-variable "step_ca_aws_account_ids" {
-  description = "AWS account IDs allowed by the step-ca AWS IID provisioner. Empty means current account only."
-  type        = list(string)
-  default     = []
-}
-
-variable "step_ca_cert_ttl" {
-  description = "Default and max certificate TTL configured on the step-ca AWS IID provisioner."
-  type        = string
-  default     = "24h"
-}
-
-variable "step_ca_provisioner_disable_custom_sans" {
-  description = "Disable custom SANs in the step-ca AWS IID provisioner."
-  type        = bool
-  default     = false
-}
-
-variable "step_ca_provisioner_disable_trust_on_first_use" {
-  description = "Disable trust-on-first-use in the step-ca AWS IID provisioner."
-  type        = bool
-  default     = false
-}
-
-variable "step_ca_additional_dns_names" {
-  description = "Additional DNS names added to the step-ca server certificate at initialization."
-  type        = list(string)
-  default     = []
-}
-
-variable "step_ca_root_ca_secret_arn" {
-  description = "Optional Secrets Manager ARN containing the step-ca root CA certificate PEM for node bootstrap."
-  type        = string
-  sensitive   = true
-  default     = ""
 }
 
 # --- Observability ---
