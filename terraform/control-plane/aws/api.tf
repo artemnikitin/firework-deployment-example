@@ -99,6 +99,8 @@ locals {
 }
 
 resource "aws_ecs_task_definition" "api" {
+  count = var.controlplane_service_mode == "split" ? 1 : 0
+
   family                   = "${var.project_name}-controlplane-api"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
@@ -123,9 +125,11 @@ resource "aws_ecs_task_definition" "api" {
 }
 
 resource "aws_ecs_service" "api" {
+  count = var.controlplane_service_mode == "split" ? 1 : 0
+
   name                 = "${var.project_name}-controlplane-api"
   cluster              = aws_ecs_cluster.controlplane.id
-  task_definition      = aws_ecs_task_definition.api.arn
+  task_definition      = aws_ecs_task_definition.api[0].arn
   desired_count        = var.api_desired_count
   launch_type          = "FARGATE"
   force_new_deployment = true

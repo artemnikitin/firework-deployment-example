@@ -16,20 +16,18 @@ flowchart LR
   GitHub["GitHub (config repo)"] -->|push webhook| EventsALB["Events ALB :443"]
   CI["CI pipeline"] -->|build + upload rootfs| S3Images["S3 images bucket"]
 
-  subgraph VPC["AWS VPC"]
+  subgraph ControlPlaneVPC["Control-plane VPC"]
     direction LR
 
-    subgraph ControlPlane["Control plane (ECS/Fargate, role-separated)"]
-      EventsALB --> Events["events service (/v1/events/github)"]
-      EventsALB --> API["read-only API + UI"]
-      Events --> S3Configs["S3 configs/state bucket"]
-      RegistryNLB["Registry NLB :9443"] --> Registry["registry service"]
-      StepCANLB["step-ca NLB :9000 (optional)"] --> StepCA["step-ca service"]
-      Registry --> S3Configs
-      Controller["controller service"] --> S3Configs
-      API -->|read-only| S3Configs
+    subgraph ControlPlane["Control plane (ECS/Fargate, one service by default)"]
+      EventsALB --> All["all-role control-plane service<br/>events + registry + controller + API"]
+      RegistryNLB["Registry NLB :9443"] --> All
+      All --> S3Configs["S3 configs/state bucket"]
     end
+  end
 
+  subgraph DataPlaneVPC["Data-plane VPC"]
+    direction LR
     subgraph Public["Public subnets"]
       ALB["ALB :443 (HTTPS)"]
     end
@@ -47,12 +45,12 @@ flowchart LR
       Node --> VM4
     end
 
-    S3Configs -->|poll configs| Node
-    S3Images -->|download rootfs| Node
-    Node -- "AWS IID cert bootstrap (optional)" --> StepCANLB
-    Node -->|mTLS enroll/register/heartbeat| RegistryNLB
     ALB -->|tenant traffic| Node
   end
+
+  S3Configs -->|poll configs| Node
+  S3Images -->|download rootfs| Node
+  Node -->|public bootstrap-token mTLS| RegistryNLB
 ```
 
 ## Deployment flow
@@ -82,12 +80,13 @@ flowchart LR
 - Node access always goes through AWS Session Manager — no SSH exposed.
 - ALB serves HTTPS (TLS 1.2/1.3); host-based routing per tenant is handled by Traefik on the nodes.
 - Each platform's domain variable is the single source of truth for DNS, the wildcard TLS certificate, and the agent `ingress_domain`. GitOps services set `metadata.subdomain: <label>` and resolve to `<subdomain>.<domain>` — `<subdomain>.<domain_name>` on AWS and `<subdomain>.<base_domain>` on GCP — so one provider-neutral GitOps tree serves both.
-- Optional step-ca service can issue short-lived node certs via AWS IID instead of static bootstrap tokens.
+- AWS node enrollment uses a shared bootstrap token stored in Secrets Manager; AWS IID-based enrollment is a known gap in this demo.
 - Observability is managed as code in Terraform (dashboards, logs, access logs, metric filters).
 - Each provider uses separate public origins: `events.<domain>` exposes only
   the exact webhook path, while `status.<domain>` exposes the authenticated
-  deployment API and same-origin UI. AWS uses a read-only S3 task role and GCP
-  uses a read-only GCS Workload Identity for the status service.
+  deployment API and same-origin UI. AWS split mode uses a read-only S3 task
+  role for the API; the default combined service shares the control-plane task
+  role. GCP uses a read-only GCS Workload Identity for the status service.
 
 For GCP, the control-plane roles run as GKE Autopilot workloads. The events
 webhook and authenticated API/UI use distinct hostnames on one GKE Gateway,

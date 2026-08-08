@@ -10,16 +10,9 @@ variable "project_name" {
   default     = "firework-example"
 }
 
-variable "use_control_plane_remote_state" {
-  description = "When true, read control-plane outputs from a local terraform.tfstate file and auto-wire data-plane inputs."
-  type        = bool
-  default     = true
-}
-
 variable "control_plane_state_path" {
-  description = "Path to control-plane terraform state file used for auto-wiring (relative to this stack when using local backend)."
-  type        = string
-  default     = "../../control-plane/aws/terraform.tfstate"
+  type    = string
+  default = "../../control-plane/aws/terraform.tfstate"
 }
 
 variable "vpc_cidr" {
@@ -98,29 +91,6 @@ variable "nat_gateway_mode" {
 
 # --- S3 (pre-existing, managed outside this stack) ---
 
-variable "s3_configs_bucket_id" {
-  description = "Optional name/ID of the S3 configs bucket (created by control-plane). If empty, auto-wired from control-plane outputs when use_control_plane_remote_state=true."
-  type        = string
-  default     = ""
-}
-
-variable "s3_configs_bucket_arn" {
-  description = "Optional ARN of the S3 configs bucket (created by control-plane). If empty, auto-wired from control-plane outputs when use_control_plane_remote_state=true."
-  type        = string
-  default     = ""
-}
-
-variable "s3_configs_prefix" {
-  description = "Optional prefix in the configs bucket where rendered node configs live (for example cp/v1/). If empty, auto-wired from control-plane config_prefix."
-  type        = string
-  default     = ""
-
-  validation {
-    condition     = var.s3_configs_prefix == "" || endswith(var.s3_configs_prefix, "/")
-    error_message = "s3_configs_prefix must end with '/' (for example cp/v1/)."
-  }
-}
-
 variable "s3_images_bucket_id" {
   description = "Name/ID of the pre-existing S3 images bucket (managed by CI, not Terraform)"
   type        = string
@@ -129,60 +99,6 @@ variable "s3_images_bucket_id" {
 variable "s3_images_bucket_arn" {
   description = "ARN of the pre-existing S3 images bucket (managed by CI, not Terraform)"
   type        = string
-}
-
-variable "registry_url" {
-  description = "Optional public HTTPS URL of the control-plane registry endpoint. If empty, auto-wired from control-plane outputs when available."
-  type        = string
-  default     = ""
-}
-
-variable "registry_server_name" {
-  description = "Optional TLS server name override for registry certificate validation. If empty, derived from registry_url host."
-  type        = string
-  default     = ""
-}
-
-variable "registry_client_ca_secret_arn" {
-  description = "Optional legacy fallback: Secrets Manager ARN containing the registry trust root CA PEM. If empty, auto-wired from control-plane outputs when available."
-  type        = string
-  default     = ""
-}
-
-variable "registry_bootstrap_token_secret_arn" {
-  description = "Optional legacy fallback: Secrets Manager ARN containing registry bootstrap token for first-time node enrollment. If empty, auto-wired from control-plane outputs when available."
-  type        = string
-  default     = ""
-}
-
-variable "step_ca_url" {
-  description = "Optional step-ca URL for node certificate bootstrap. If empty, auto-wired from control-plane outputs when available."
-  type        = string
-  default     = ""
-}
-
-variable "step_ca_root_ca_secret_arn" {
-  description = "Optional Secrets Manager ARN containing step-ca root CA PEM used by nodes. If empty, auto-wired from control-plane outputs when available."
-  type        = string
-  default     = ""
-}
-
-variable "step_ca_provisioner" {
-  description = "Optional step-ca provisioner name used by nodes when requesting certificates. If empty, auto-wired from control-plane outputs when available."
-  type        = string
-  default     = ""
-}
-
-variable "step_ca_subject_suffix" {
-  description = "Suffix appended to the EC2 instance ID to form the node certificate subject."
-  type        = string
-  default     = ".node.firework.internal"
-}
-
-variable "step_ca_renew_expires_in" {
-  description = "Time before certificate expiry when step CLI renew daemon starts attempting renewals."
-  type        = string
-  default     = "8h"
 }
 
 # --- EC2 / Nodes ---
@@ -390,6 +306,12 @@ variable "acm_certificate_arn" {
 }
 
 # --- Observability ---
+
+variable "enable_alb_access_logs" {
+  description = "When true, store Application Load Balancer access logs in a managed S3 bucket."
+  type        = bool
+  default     = true
+}
 
 variable "observability_log_retention_days" {
   description = "Retention (days) for CloudWatch log groups managed by this stack."

@@ -10,11 +10,10 @@ locals {
   agent_metric_namespace          = "Firework/${var.project_name}"
   alb_access_logs_prefix          = "alb"
   controlplane_cluster_name       = "${var.project_name}-controlplane"
-  events_service_name             = "${var.project_name}-controlplane-events"
-  registry_service_name           = "${var.project_name}-controlplane-registry"
-  controller_service_name         = "${var.project_name}-controlplane-controller"
-  # Controller log group is created by the control-plane stack; derived here by name convention.
-  controller_log_group_name = "/ecs/${var.project_name}/controlplane-controller"
+  controlplane_service_names      = try(local.control_plane_outputs.controlplane_service_names, ["${var.project_name}-controlplane"])
+  # The combined service is the demo default; split mode exports the controller
+  # service's log group through the same control-plane state.
+  controller_log_group_name = try(local.control_plane_outputs.controlplane_log_group_name, "/ecs/${var.project_name}/controlplane")
 }
 
 resource "aws_cloudwatch_log_group" "node_agent" {
@@ -111,6 +110,8 @@ resource "aws_cloudwatch_log_metric_filter" "controller_placement_read_failed" {
 }
 
 resource "aws_s3_bucket" "alb_access_logs" {
+  count = var.enable_alb_access_logs ? 1 : 0
+
   bucket_prefix = "${var.project_name}-alb-logs-"
   force_destroy = true
 
@@ -118,7 +119,8 @@ resource "aws_s3_bucket" "alb_access_logs" {
 }
 
 resource "aws_s3_bucket_public_access_block" "alb_access_logs" {
-  bucket = aws_s3_bucket.alb_access_logs.id
+  count  = var.enable_alb_access_logs ? 1 : 0
+  bucket = aws_s3_bucket.alb_access_logs[0].id
 
   block_public_acls       = true
   block_public_policy     = true
@@ -127,14 +129,16 @@ resource "aws_s3_bucket_public_access_block" "alb_access_logs" {
 }
 
 resource "aws_s3_bucket_ownership_controls" "alb_access_logs" {
-  bucket = aws_s3_bucket.alb_access_logs.id
+  count  = var.enable_alb_access_logs ? 1 : 0
+  bucket = aws_s3_bucket.alb_access_logs[0].id
   rule {
     object_ownership = "BucketOwnerPreferred"
   }
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "alb_access_logs" {
-  bucket = aws_s3_bucket.alb_access_logs.id
+  count  = var.enable_alb_access_logs ? 1 : 0
+  bucket = aws_s3_bucket.alb_access_logs[0].id
 
   rule {
     apply_server_side_encryption_by_default {
@@ -144,7 +148,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "alb_access_logs" 
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "alb_access_logs" {
-  bucket = aws_s3_bucket.alb_access_logs.id
+  count  = var.enable_alb_access_logs ? 1 : 0
+  bucket = aws_s3_bucket.alb_access_logs[0].id
 
   rule {
     id     = "expire-old-alb-access-logs"
@@ -158,6 +163,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "alb_access_logs" {
 }
 
 data "aws_iam_policy_document" "alb_access_logs" {
+  count = var.enable_alb_access_logs ? 1 : 0
+
   statement {
     sid = "AWSLogDeliveryAclCheck"
     principals {
@@ -165,7 +172,7 @@ data "aws_iam_policy_document" "alb_access_logs" {
       identifiers = ["logdelivery.elasticloadbalancing.amazonaws.com"]
     }
     actions   = ["s3:GetBucketAcl"]
-    resources = [aws_s3_bucket.alb_access_logs.arn]
+    resources = [aws_s3_bucket.alb_access_logs[0].arn]
   }
 
   statement {
@@ -176,14 +183,15 @@ data "aws_iam_policy_document" "alb_access_logs" {
     }
     actions = ["s3:PutObject"]
     resources = [
-      "${aws_s3_bucket.alb_access_logs.arn}/${local.alb_access_logs_prefix}/AWSLogs/${data.aws_caller_identity.current.account_id}/*"
+      "${aws_s3_bucket.alb_access_logs[0].arn}/${local.alb_access_logs_prefix}/AWSLogs/${data.aws_caller_identity.current.account_id}/*"
     ]
   }
 }
 
 resource "aws_s3_bucket_policy" "alb_access_logs" {
-  bucket = aws_s3_bucket.alb_access_logs.id
-  policy = data.aws_iam_policy_document.alb_access_logs.json
+  count  = var.enable_alb_access_logs ? 1 : 0
+  bucket = aws_s3_bucket.alb_access_logs[0].id
+  policy = data.aws_iam_policy_document.alb_access_logs[0].json
 }
 
 resource "aws_cloudwatch_dashboard" "observability" {
@@ -271,9 +279,9 @@ resource "aws_cloudwatch_dashboard" "observability" {
           region = var.aws_region
           view   = "timeSeries"
           metrics = [
-            ["AWS/ECS", "RunningTaskCount", "ClusterName", local.controlplane_cluster_name, "ServiceName", local.events_service_name, { stat = "Average", label = "events running" }],
-            ["AWS/ECS", "RunningTaskCount", "ClusterName", local.controlplane_cluster_name, "ServiceName", local.registry_service_name, { stat = "Average", label = "registry running" }],
-            ["AWS/ECS", "RunningTaskCount", "ClusterName", local.controlplane_cluster_name, "ServiceName", local.controller_service_name, { stat = "Average", label = "controller running" }]
+            for service_name in local.controlplane_service_names : [
+              "AWS/ECS", "RunningTaskCount", "ClusterName", local.controlplane_cluster_name, "ServiceName", service_name, { stat = "Average", label = "${service_name} running" }
+            ]
           ]
         }
       },
@@ -288,9 +296,9 @@ resource "aws_cloudwatch_dashboard" "observability" {
           region = var.aws_region
           view   = "timeSeries"
           metrics = [
-            ["AWS/ECS", "CPUUtilization", "ClusterName", local.controlplane_cluster_name, "ServiceName", local.events_service_name, { stat = "Average", label = "events cpu %" }],
-            ["AWS/ECS", "CPUUtilization", "ClusterName", local.controlplane_cluster_name, "ServiceName", local.registry_service_name, { stat = "Average", label = "registry cpu %" }],
-            ["AWS/ECS", "CPUUtilization", "ClusterName", local.controlplane_cluster_name, "ServiceName", local.controller_service_name, { stat = "Average", label = "controller cpu %" }]
+            for service_name in local.controlplane_service_names : [
+              "AWS/ECS", "CPUUtilization", "ClusterName", local.controlplane_cluster_name, "ServiceName", service_name, { stat = "Average", label = "${service_name} cpu %" }
+            ]
           ]
         }
       },

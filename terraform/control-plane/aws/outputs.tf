@@ -57,35 +57,14 @@ output "registry_url" {
   value       = local.registry_url
 }
 
-output "registry_nlb_dns_name" {
-  description = "DNS name of the registry NLB"
+output "registry_server_name" {
+  description = "TLS server name for the registry endpoint"
   value       = aws_lb.registry.dns_name
 }
 
-output "step_ca_url" {
-  description = "step-ca endpoint URL for node bootstrap (empty when step-ca is disabled)"
-  value       = local.step_ca_url
-}
-
-output "step_ca_nlb_dns_name" {
-  description = "DNS name of the step-ca NLB (empty when step-ca is disabled)"
-  value       = var.enable_step_ca ? aws_lb.step_ca[0].dns_name : ""
-}
-
-output "step_ca_service_name" {
-  description = "ECS service name for step-ca (empty when step-ca is disabled)"
-  value       = var.enable_step_ca ? aws_ecs_service.step_ca[0].name : ""
-}
-
-output "step_ca_provisioner_name" {
-  description = "step-ca AWS IID provisioner name to use on nodes"
-  value       = var.step_ca_aws_provisioner_name
-}
-
-output "step_ca_root_ca_secret_arn" {
-  description = "Secrets Manager ARN containing the step-ca root CA certificate PEM for node bootstrap"
-  value       = var.step_ca_root_ca_secret_arn
-  sensitive   = true
+output "registry_nlb_dns_name" {
+  description = "DNS name of the registry NLB"
+  value       = aws_lb.registry.dns_name
 }
 
 output "ecs_cluster_name" {
@@ -94,23 +73,45 @@ output "ecs_cluster_name" {
 }
 
 output "events_service_name" {
-  description = "ECS service name for events role"
-  value       = aws_ecs_service.events.name
+  description = "ECS service name serving the events role"
+  value       = local.controlplane_service_name
 }
 
 output "registry_service_name" {
-  description = "ECS service name for registry role"
-  value       = aws_ecs_service.registry.name
+  description = "ECS service name serving the registry role"
+  value       = local.controlplane_service_name
 }
 
 output "controller_service_name" {
-  description = "ECS service name for controller role"
-  value       = aws_ecs_service.controller.name
+  description = "ECS service name serving the controller role"
+  value       = local.controlplane_service_name
 }
 
 output "api_service_name" {
-  description = "ECS service name for read-only API role"
-  value       = aws_ecs_service.api.name
+  description = "ECS service name serving the read-only API role"
+  value       = local.controlplane_service_name
+}
+
+output "controlplane_service_name" {
+  description = "ECS service name serving the control plane"
+  value       = local.controlplane_service_name
+}
+
+output "controlplane_service_names" {
+  description = "ECS service names serving the control plane roles"
+  value = var.controlplane_service_mode == "all" ? [
+    local.all_container_name,
+    ] : [
+    local.events_container_name,
+    local.registry_container_name,
+    local.controller_container_name,
+    local.api_container_name,
+  ]
+}
+
+output "controlplane_log_group_name" {
+  description = "CloudWatch log group containing the controller or combined control-plane logs"
+  value       = local.controlplane_log_group_name
 }
 
 output "events_log_group_name" {
@@ -145,7 +146,7 @@ output "registry_client_ca_secret_arn" {
 }
 
 output "registry_bootstrap_token_secret_arn" {
-  description = "Optional Secrets Manager ARN containing registry bootstrap token (empty when legacy token enrollment is disabled)"
+  description = "Secrets Manager ARN containing the registry bootstrap token"
   value       = local.effective_registry_bootstrap_token_secret_arn
   sensitive   = true
 }
@@ -169,13 +170,7 @@ output "generated_github_webhook_secret" {
 }
 
 output "generated_registry_bootstrap_token" {
-  description = "Auto-generated registry bootstrap token value (empty when an external secret ARN was provided or legacy enrollment is disabled)"
+  description = "Auto-generated registry bootstrap token value (empty when an external secret ARN was provided)"
   value       = local.auto_generated_registry_bootstrap_token
-  sensitive   = true
-}
-
-output "generated_step_ca_password" {
-  description = "Auto-generated step-ca password value (empty when an external secret ARN was provided or step-ca is disabled)"
-  value       = local.auto_generated_step_ca_password
   sensitive   = true
 }

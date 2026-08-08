@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# ECS/Fargate control-plane (role-separated services)
+# ECS/Fargate control-plane (combined by default, role-separated on request)
 # -----------------------------------------------------------------------------
 
 resource "aws_cloudwatch_log_group" "events" {
@@ -143,7 +143,7 @@ resource "aws_lb_listener_rule" "status" {
 
 resource "aws_lb" "registry" {
   name               = "${var.project_name}-registry"
-  internal           = var.registry_internal
+  internal           = false
   load_balancer_type = "network"
   subnets            = [for subnet in aws_subnet.public : subnet.id]
 
@@ -415,9 +415,112 @@ locals {
       }
     } : {},
   )
+
+  all_bootstrap_script = <<EOT
+    set -eu
+    mkdir -p /tmp/firework/tls /tmp/firework/pki /tmp/firework/secrets
+    printf '%s' "$ALL_TLS_CERT_PEM" > /tmp/firework/tls/controlplane.crt
+    printf '%s' "$ALL_TLS_KEY_PEM" > /tmp/firework/tls/controlplane.key
+    printf '%s' "$ALL_CLIENT_CA_PEM" > /tmp/firework/pki/node-ca.crt
+    printf '%s' "$ALL_ENROLLMENT_CA_PEM" > /tmp/firework/pki/enrollment-ca.crt
+    printf '%s' "$ALL_ENROLLMENT_CA_KEY_PEM" > /tmp/firework/pki/enrollment-ca.key
+    printf '%s' "$ALL_OPERATOR_TOKEN" > /tmp/firework/secrets/operator-token
+    chmod 0600 /tmp/firework/tls/controlplane.key /tmp/firework/pki/enrollment-ca.key /tmp/firework/secrets/operator-token
+    {
+      printf '%s\n' \
+        'role: "all"' \
+        'registry_listen_addr: "${var.registry_listen_addr}"' \
+        'events_listen_addr: "${var.events_listen_addr}"' \
+        'api_listen_addr: "${var.api_listen_addr}"' \
+        'operator_token_file: "/tmp/firework/secrets/operator-token"' \
+        'ingress_domain: "${var.service_ingress_domain}"' \
+        'state:' \
+        '  backend: "s3"' \
+        '  prefix: "${local.state_prefix_clean}"' \
+        '  s3:' \
+        '    bucket: "${aws_s3_bucket.configs.id}"' \
+        '    region: "${var.aws_region}"' \
+        '    endpoint_url: "${var.state_s3_endpoint_url}"' \
+        '    force_path_style: ${var.state_s3_force_path_style}' \
+        'leader_lease_ttl: "${var.leader_lease_ttl}"' \
+        'leader_renew_interval: "${var.leader_renew_interval}"' \
+        'controller_tick: "${var.controller_tick}"' \
+        'node_stale_ttl: "${var.node_stale_ttl}"' \
+        'target_branch: "${var.target_branch}"' \
+        'config_dir: "${var.config_dir}"' \
+        'git_repo_url: "${var.git_repo_url}"' \
+        'reconcile_on_start: ${var.reconcile_on_start}' \
+        "github_webhook_secret: \"$ALL_GITHUB_WEBHOOK_SECRET\"" \
+        'tls:' \
+        '  cert_file: "/tmp/firework/tls/controlplane.crt"' \
+        '  key_file: "/tmp/firework/tls/controlplane.key"' \
+        '  client_ca_file: "/tmp/firework/pki/node-ca.crt"' \
+        'enrollment:' \
+        '  ca_file: "/tmp/firework/pki/enrollment-ca.crt"' \
+        '  ca_key_file: "/tmp/firework/pki/enrollment-ca.key"' \
+        '  node_cert_ttl: "${var.registry_node_cert_ttl}"' \
+        '  bootstrap_tokens:' \
+        "    - token: \"$ALL_BOOTSTRAP_TOKEN\""
+%{if var.registry_bootstrap_node_id != ""}
+      printf '%s\n' \
+        '      node_id: "${var.registry_bootstrap_node_id}"'
+%{endif}
+    } > /tmp/firework/controlplane.yaml
+    chmod 0600 /tmp/firework/controlplane.yaml
+    exec ${var.controlplane_binary_path} --config /tmp/firework/controlplane.yaml
+  EOT
+
+  all_secret_entries = [
+    { name = "ALL_TLS_CERT_PEM", valueFrom = local.effective_registry_tls_cert_secret_arn },
+    { name = "ALL_TLS_KEY_PEM", valueFrom = local.effective_registry_tls_key_secret_arn },
+    { name = "ALL_CLIENT_CA_PEM", valueFrom = local.effective_registry_client_ca_secret_arn },
+    { name = "ALL_ENROLLMENT_CA_PEM", valueFrom = local.effective_registry_enrollment_ca_secret_arn },
+    { name = "ALL_ENROLLMENT_CA_KEY_PEM", valueFrom = local.effective_registry_enrollment_ca_key_secret_arn },
+    { name = "ALL_BOOTSTRAP_TOKEN", valueFrom = local.effective_registry_bootstrap_token_secret_arn },
+    { name = "ALL_GITHUB_WEBHOOK_SECRET", valueFrom = local.effective_github_webhook_secret_arn },
+    { name = "ALL_OPERATOR_TOKEN", valueFrom = local.effective_operator_token_secret_arn },
+  ]
+
+  all_container_definition = merge(
+    {
+      name       = local.all_container_name
+      image      = var.controlplane_image
+      essential  = true
+      entryPoint = ["/bin/sh", "-lc"]
+      command    = [local.all_bootstrap_script]
+      portMappings = [
+        { containerPort = var.events_task_port, hostPort = var.events_task_port, protocol = "tcp" },
+        { containerPort = var.registry_task_port, hostPort = var.registry_task_port, protocol = "tcp" },
+        { containerPort = var.api_task_port, hostPort = var.api_task_port, protocol = "tcp" },
+      ]
+      secrets = local.all_secret_entries
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.controlplane.name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "ecs"
+        }
+      }
+    },
+    var.controlplane_image_pull_secret_arn != "" ? {
+      repositoryCredentials = {
+        credentialsParameter = var.controlplane_image_pull_secret_arn
+      }
+    } : {},
+  )
+}
+
+resource "aws_cloudwatch_log_group" "controlplane" {
+  name              = "/ecs/${var.project_name}/controlplane"
+  retention_in_days = var.observability_log_retention_days
+
+  tags = { Name = "${var.project_name}-controlplane-logs" }
 }
 
 resource "aws_ecs_task_definition" "events" {
+  count = var.controlplane_service_mode == "split" ? 1 : 0
+
   family                   = "${var.project_name}-controlplane-events"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
@@ -453,6 +556,8 @@ resource "aws_ecs_task_definition" "events" {
 }
 
 resource "aws_ecs_task_definition" "registry" {
+  count = var.controlplane_service_mode == "split" ? 1 : 0
+
   family                   = "${var.project_name}-controlplane-registry"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
@@ -484,8 +589,8 @@ resource "aws_ecs_task_definition" "registry" {
     }
 
     precondition {
-      condition     = var.enable_step_ca || (local.registry_enrollment_enabled && local.registry_bootstrap_token_enabled)
-      error_message = "When enable_step_ca is false, legacy enrollment CA cert/key and bootstrap token secrets must all be set (or auto-generated)."
+      condition     = local.registry_enrollment_enabled && local.registry_bootstrap_token_enabled
+      error_message = "Bootstrap-token enrollment CA cert/key and bootstrap token secrets must all be set (or auto-generated)."
     }
 
     precondition {
@@ -503,6 +608,8 @@ resource "aws_ecs_task_definition" "registry" {
 }
 
 resource "aws_ecs_task_definition" "controller" {
+  count = var.controlplane_service_mode == "split" ? 1 : 0
+
   family                   = "${var.project_name}-controlplane-controller"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
@@ -516,9 +623,11 @@ resource "aws_ecs_task_definition" "controller" {
 }
 
 resource "aws_ecs_service" "events" {
+  count = var.controlplane_service_mode == "split" ? 1 : 0
+
   name                 = "${var.project_name}-controlplane-events"
   cluster              = aws_ecs_cluster.controlplane.id
-  task_definition      = aws_ecs_task_definition.events.arn
+  task_definition      = aws_ecs_task_definition.events[0].arn
   desired_count        = var.events_desired_count
   launch_type          = "FARGATE"
   force_new_deployment = true
@@ -550,9 +659,11 @@ resource "aws_ecs_service" "events" {
 }
 
 resource "aws_ecs_service" "registry" {
+  count = var.controlplane_service_mode == "split" ? 1 : 0
+
   name                 = "${var.project_name}-controlplane-registry"
   cluster              = aws_ecs_cluster.controlplane.id
-  task_definition      = aws_ecs_task_definition.registry.arn
+  task_definition      = aws_ecs_task_definition.registry[0].arn
   desired_count        = var.registry_desired_count
   launch_type          = "FARGATE"
   force_new_deployment = true
@@ -584,9 +695,11 @@ resource "aws_ecs_service" "registry" {
 }
 
 resource "aws_ecs_service" "controller" {
+  count = var.controlplane_service_mode == "split" ? 1 : 0
+
   name                 = "${var.project_name}-controlplane-controller"
   cluster              = aws_ecs_cluster.controlplane.id
-  task_definition      = aws_ecs_task_definition.controller.arn
+  task_definition      = aws_ecs_task_definition.controller[0].arn
   desired_count        = var.controller_desired_count
   launch_type          = "FARGATE"
   force_new_deployment = true
@@ -609,6 +722,93 @@ resource "aws_ecs_service" "controller" {
   tags = { Name = "${var.project_name}-controlplane-controller-svc" }
 }
 
+resource "aws_ecs_task_definition" "all" {
+  count = var.controlplane_service_mode == "all" ? 1 : 0
+
+  family                   = "${var.project_name}-controlplane"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = tostring(var.controlplane_task_cpu)
+  memory                   = tostring(var.controlplane_task_memory)
+  execution_role_arn       = aws_iam_role.task_execution.arn
+  task_role_arn            = aws_iam_role.task.arn
+  container_definitions    = jsonencode([local.all_container_definition])
+
+  lifecycle {
+    precondition {
+      condition = alltrue([
+        local.effective_registry_tls_cert_secret_arn != "",
+        local.effective_registry_tls_key_secret_arn != "",
+        local.effective_registry_client_ca_secret_arn != "",
+        local.registry_enrollment_enabled,
+        local.registry_bootstrap_token_enabled,
+        local.effective_github_webhook_secret_arn != "",
+        local.effective_operator_token_secret_arn != "",
+      ])
+      error_message = "Combined control-plane service requires registry TLS, bootstrap-token enrollment, webhook, and operator secrets (set them explicitly or enable auto_create_demo_secrets)."
+    }
+
+    precondition {
+      condition     = !var.reconcile_on_start || var.git_repo_url != ""
+      error_message = "git_repo_url is required when reconcile_on_start is true."
+    }
+  }
+
+  tags = { Name = "${var.project_name}-controlplane-taskdef" }
+}
+
+resource "aws_ecs_service" "all" {
+  count = var.controlplane_service_mode == "all" ? 1 : 0
+
+  name                 = "${var.project_name}-controlplane"
+  cluster              = aws_ecs_cluster.controlplane.id
+  task_definition      = aws_ecs_task_definition.all[0].arn
+  desired_count        = var.controlplane_desired_count
+  launch_type          = "FARGATE"
+  force_new_deployment = true
+
+  triggers = {
+    controlplane_deployment_revision = var.controlplane_deployment_revision
+  }
+
+  network_configuration {
+    subnets          = [for subnet in aws_subnet.public : subnet.id]
+    security_groups  = [aws_security_group.controlplane_tasks.id]
+    assign_public_ip = var.assign_public_ip
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.events.arn
+    container_name   = local.all_container_name
+    container_port   = var.events_task_port
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.registry.arn
+    container_name   = local.all_container_name
+    container_port   = var.registry_task_port
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.api.arn
+    container_name   = local.all_container_name
+    container_port   = var.api_task_port
+  }
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  depends_on = [
+    aws_lb_listener_rule.events_webhook,
+    aws_lb_listener_rule.status,
+    aws_lb_listener.registry_tcp,
+  ]
+
+  tags = { Name = "${var.project_name}-controlplane-svc" }
+}
+
 resource "aws_cloudwatch_dashboard" "controlplane" {
   dashboard_name = "${var.project_name}-controlplane-observability"
   dashboard_body = jsonencode({
@@ -620,15 +820,10 @@ resource "aws_cloudwatch_dashboard" "controlplane" {
         width  = 24
         height = 6
         properties = {
-          title  = "ECS Service Health"
-          region = var.aws_region
-          view   = "timeSeries"
-          metrics = [
-            ["AWS/ECS", "RunningTaskCount", "ClusterName", aws_ecs_cluster.controlplane.name, "ServiceName", aws_ecs_service.events.name, { stat = "Average", label = "events running" }],
-            ["AWS/ECS", "RunningTaskCount", "ClusterName", aws_ecs_cluster.controlplane.name, "ServiceName", aws_ecs_service.registry.name, { stat = "Average", label = "registry running" }],
-            ["AWS/ECS", "RunningTaskCount", "ClusterName", aws_ecs_cluster.controlplane.name, "ServiceName", aws_ecs_service.controller.name, { stat = "Average", label = "controller running" }],
-            ["AWS/ECS", "RunningTaskCount", "ClusterName", aws_ecs_cluster.controlplane.name, "ServiceName", aws_ecs_service.api.name, { stat = "Average", label = "api running" }]
-          ]
+          title   = "ECS Service Health"
+          region  = var.aws_region
+          view    = "timeSeries"
+          metrics = local.controlplane_running_metrics
         }
       },
       {
