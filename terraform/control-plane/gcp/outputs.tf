@@ -55,6 +55,11 @@ output "registry_internal_ip" {
   description = "Internal address assigned to the registry load balancer."
 }
 
+output "registry_allowed_cidrs" {
+  value       = var.registry_allowed_cidrs
+  description = "CIDRs permitted to reach the internal registry load balancer; the data-plane network CIDR must be included."
+}
+
 output "registry_ca_secret_id" {
   value = local.effective_enrollment_ca_cert_secret_id
 }

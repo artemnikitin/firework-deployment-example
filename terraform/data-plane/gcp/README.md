@@ -1,7 +1,7 @@
 # GCP data plane
 
 This stack creates a private managed instance group of x86_64 Firework nodes
-with no public IPs or Cloud NAT, plus a global HTTPS load balancer that
+with no public IPs or Cloud NAT by default, plus a global HTTPS load balancer that
 terminates TLS and forwards HTTP to Traefik on port 8080. The stack peers its
 VPC with the control-plane VPC and reaches the internal registry load balancer
 over that private route.
@@ -14,7 +14,8 @@ Prerequisites:
 - Build the `firework-node-gcp` image family with `packer/gcp`.
 - Apply `terraform/control-plane/gcp`; the default local-state wiring reads its outputs automatically.
 - Keep the control-plane and data-plane `network_cidr` values non-overlapping;
-  the default ranges are `10.20.0.0/24` and `10.30.0.0/24`.
+  the default ranges are `10.20.0.0/24` and `10.30.0.0/24`. The data-plane
+  CIDR must also be included in the control-plane `registry_allowed_cidrs`.
 - Create and delegate the pre-existing Cloud DNS zone.
 - Grant the Terraform principal `roles/iam.serviceAccountUser` at project scope
   before the first apply, so it can attach the node service account Terraform creates.
@@ -51,7 +52,8 @@ how many zones are in use.
 
 To move the data plane to another region, change `gcp_region`, either clear
 `node_zones` or set zones of the new region, and use a new non-overlapping
-`network_cidr`.
+`network_cidr`. Update the control-plane `registry_allowed_cidrs` to include the
+new CIDR before applying this stack; its wiring precondition checks the pairing.
 The MIG uses create-before-destroy so Terraform can switch the global backend
 service to the replacement MIG before deleting the old one. The regional
 subnet, VPC peering, MIG, and log buckets are recreated; the global tenant IP,
@@ -66,9 +68,21 @@ terraform apply
 ```
 
 Certificate Manager issuance commonly takes 15–60 minutes after DNS
-authorization propagates. Nodes have no external IP or NAT path; Google API
-traffic uses Private Google Access, and registry traffic uses the peered
-internal load balancer. Use IAP for SSH.
+authorization propagates. Nodes have no external IP or NAT path by default;
+Google API traffic uses Private Google Access, and registry traffic uses the
+peered internal load balancer. Guest microVMs and on-node package/debugging
+traffic also have no public egress unless `enable_cloud_nat = true` is set.
+Use IAP for SSH.
+
+The data-plane stack creates both directions of the cross-stack peering and
+owns its lifecycle. Peering names include a hash of the data-plane VPC, so
+multiple data planes can target one control plane without name collisions.
+Custom routes are not exchanged; the required subnet routes are sufficient for
+the internal registry path. Destroy data planes before the control plane.
+
+If control-plane remote state is disabled, the prerequisites also include
+`control_plane_network_self_link`; set it alongside the other manual wiring
+values in `terraform.tfvars`.
 
 ## Persistent storage
 

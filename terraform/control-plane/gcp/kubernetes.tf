@@ -936,10 +936,29 @@ resource "kubernetes_deployment" "all" {
       metadata[0].annotations["autopilot.gke.io/resource-adjustment"],
       metadata[0].annotations["autopilot.gke.io/warden-version"],
       spec[0].template[0].spec[0].container[0].resources[0].requests["ephemeral-storage"],
+      spec[0].template[0].spec[0].container[0].security_context,
       spec[0].template[0].spec[0].security_context,
       spec[0].template[0].spec[0].toleration,
     ]
   }
+}
+
+resource "kubernetes_pod_disruption_budget_v1" "all" {
+  count = var.controlplane_service_mode == "all" ? 1 : 0
+
+  metadata {
+    name      = "firework-controlplane"
+    namespace = kubernetes_namespace.firework.metadata[0].name
+  }
+
+  spec {
+    min_available = 1
+    selector {
+      match_labels = { role = "all" }
+    }
+  }
+
+  depends_on = [kubernetes_deployment.all]
 }
 
 # ---------------------------------------------------------------------------

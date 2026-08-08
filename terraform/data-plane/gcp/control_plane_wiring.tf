@@ -27,6 +27,7 @@ locals {
   effective_registry_ca_secret_id              = var.registry_ca_secret_id != "" ? var.registry_ca_secret_id : try(local.control_plane_outputs.registry_ca_secret_id, "")
   effective_registry_bootstrap_token_secret_id = var.registry_bootstrap_token_secret_id != "" ? var.registry_bootstrap_token_secret_id : try(local.control_plane_outputs.registry_bootstrap_token_secret_id, "")
   effective_control_plane_network_self_link    = var.control_plane_network_self_link != "" ? var.control_plane_network_self_link : try(local.control_plane_outputs.controlplane_network_self_link, "")
+  effective_registry_allowed_cidrs             = try(local.control_plane_outputs.registry_allowed_cidrs, [])
 }
 
 resource "terraform_data" "validate_control_plane_wiring" {
@@ -73,6 +74,14 @@ resource "terraform_data" "validate_control_plane_wiring" {
     precondition {
       condition     = local.effective_control_plane_network_self_link != ""
       error_message = "control-plane network self-link is required for the private registry peering. Apply control-plane first or set control_plane_network_self_link explicitly."
+    }
+
+    precondition {
+      condition = (
+        length(local.effective_registry_allowed_cidrs) == 0 ||
+        contains(local.effective_registry_allowed_cidrs, var.network_cidr)
+      )
+      error_message = "The data-plane network_cidr is not included in the control-plane registry_allowed_cidrs. Update the control-plane allowlist before moving or creating this data plane."
     }
   }
 }

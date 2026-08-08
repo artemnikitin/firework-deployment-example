@@ -39,6 +39,12 @@ variable "network_cidr" {
   default = "10.30.0.0/24"
 }
 
+variable "enable_cloud_nat" {
+  type        = bool
+  default     = false
+  description = "Create Cloud NAT for node and guest-microVM internet egress. Private Google Access and control-plane peering work without it; enable only when workloads need public internet access or on-node package/debugging egress."
+}
+
 variable "node_machine_type" {
   type        = string
   default     = "n4-standard-8"

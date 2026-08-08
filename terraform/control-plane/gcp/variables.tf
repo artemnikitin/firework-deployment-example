@@ -196,6 +196,11 @@ variable "api_port" {
     condition     = var.api_port > 0 && var.api_port < 65536
     error_message = "api_port must be a valid TCP port."
   }
+
+  validation {
+    condition     = length(distinct([var.events_port, var.registry_port, var.api_port])) == 3
+    error_message = "events_port, registry_port, and api_port must be distinct because the combined control-plane process binds all three listeners."
+  }
 }
 
 variable "registry_node_cert_ttl" {
@@ -269,8 +274,8 @@ variable "auto_create_demo_secrets" {
       var.bootstrap_token_secret_id == "",
       var.events_tls_cert_secret_id == "",
       var.events_tls_key_secret_id == "",
-      var.registry_tls_cert_secret_id == "",
-      var.registry_tls_key_secret_id == "",
+      var.controlplane_service_mode == "all" || var.registry_tls_cert_secret_id == "",
+      var.controlplane_service_mode == "all" || var.registry_tls_key_secret_id == "",
       var.enrollment_ca_cert_secret_id == "",
       var.enrollment_ca_key_secret_id == "",
       var.operator_token_secret_id == "",
@@ -278,8 +283,8 @@ variable "auto_create_demo_secrets" {
       var.bootstrap_token_secret_id != "",
       var.events_tls_cert_secret_id != "",
       var.events_tls_key_secret_id != "",
-      var.registry_tls_cert_secret_id != "",
-      var.registry_tls_key_secret_id != "",
+      var.controlplane_service_mode == "all" || var.registry_tls_cert_secret_id != "",
+      var.controlplane_service_mode == "all" || var.registry_tls_key_secret_id != "",
       var.enrollment_ca_cert_secret_id != "",
       var.enrollment_ca_key_secret_id != "",
       var.operator_token_secret_id != "",

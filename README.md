@@ -87,7 +87,7 @@ flowchart LR
 - Each provider uses separate public origins: `events.<domain>` exposes only
   the exact webhook path, while `status.<domain>` exposes the authenticated
   deployment API and same-origin UI. AWS uses a read-only S3 task role and GCP
-  uses a read-only GCS Workload Identity for the status service.
+  uses a read-only GCS Workload Identity for the status service in split mode.
 
 For GCP, the control plane runs by default as one all-role GKE Autopilot
 Deployment with a shared Workload Identity; set `controlplane_service_mode =
@@ -95,11 +95,14 @@ Deployment with a shared Workload Identity; set `controlplane_service_mode =
 authenticated API/UI use distinct hostnames on one GKE Gateway, backed by
 durable Certificate Manager DNS-authorized certificates and a shared static IP
 from `terraform/events-edge/gcp`. The registry is an internal TCP LoadBalancer.
-The data-plane VPC peers with the control-plane VPC and uses Private Google
-Access, so its private regional managed instance group needs no Cloud NAT or
-public node IPs. Terraform state is local in the example stacks. See the GCP
-guides above for container image, DNS delegation, private peering, and TLS
-prerequisites.
+The default combined pod deliberately shares the mutating control-plane identity
+needed by events, registry, and controller; use split mode when the public API/UI
+must retain its read-only identity. The data-plane VPC peers with the control-plane
+VPC and uses Private Google Access, so its private regional managed instance group
+needs no Cloud NAT or public node IPs by default. Set `enable_cloud_nat = true`
+when guest workloads or node debugging require public internet egress. Terraform
+state is local in the example stacks. See the GCP guides above for container image,
+DNS delegation, private peering, and TLS prerequisites.
 
 ## Cleanup
 

@@ -10,6 +10,10 @@ dns_zone_name = "firework-gcp"
 base_domain       = "gcp.example.com"
 images_bucket_name = "firework-images-amd64-my-gcp-project"
 
+# Default false: Private Google Access and registry peering are enough for the
+# demo. Enable only when guest workloads or node debugging need public egress.
+# enable_cloud_nat = true
+
 # The default local-state wiring reads these from terraform/control-plane/gcp,
 # including the VPC self-link used to create private peering.
 # Uncomment only when the control-plane state file is intentionally unavailable.

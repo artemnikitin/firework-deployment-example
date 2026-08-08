@@ -23,6 +23,18 @@ resource "google_logging_metric" "control_plane_errors" {
   }
 }
 
+resource "google_logging_metric" "all_errors" {
+  count  = var.controlplane_service_mode == "all" ? 1 : 0
+  name   = "${local.name_prefix}-all-errors"
+  filter = "${local.cp_log_filter} AND labels.\"k8s-pod/role\":\"all\" AND severity>=ERROR"
+
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+    unit        = "1"
+  }
+}
+
 # events role errors
 resource "google_logging_metric" "events_errors" {
   count  = var.controlplane_service_mode == "split" ? 1 : 0
