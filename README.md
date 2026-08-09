@@ -101,8 +101,11 @@ must retain its read-only identity. The data-plane VPC peers with the control-pl
 VPC and uses Private Google Access, so its private regional managed instance group
 needs no Cloud NAT or public node IPs by default. Set `enable_cloud_nat = true`
 when guest workloads or node debugging require public internet egress. Terraform
-state is local in the example stacks. See the GCP guides above for container image,
-DNS delegation, private peering, and TLS prerequisites.
+state is local in the example stacks. The GCP control-plane registry allowlist
+defaults to private `10.0.0.0/8`, so the standard non-overlapping network CIDRs
+work without CIDR entries in either tfvars file; set an explicit narrower
+`registry_allowed_cidrs` list when required. See the GCP guides above for
+container image, DNS delegation, private peering, and TLS prerequisites.
 
 ## Cleanup
 

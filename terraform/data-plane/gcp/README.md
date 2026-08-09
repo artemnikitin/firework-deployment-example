@@ -14,8 +14,10 @@ Prerequisites:
 - Build the `firework-node-gcp` image family with `packer/gcp`.
 - Apply `terraform/control-plane/gcp`; the default local-state wiring reads its outputs automatically.
 - Keep the control-plane and data-plane `network_cidr` values non-overlapping;
-  the default ranges are `10.20.0.0/24` and `10.30.0.0/24`. The data-plane
-  CIDR must also be included in the control-plane `registry_allowed_cidrs`.
+  the default ranges are `10.20.0.0/24` and `10.30.0.0/24`. The control-plane
+  registry allowlist defaults to `10.0.0.0/8`, so the data-plane CIDR does not
+  need to be specified in either stack's tfvars file when using a non-overlapping
+  10/8 range.
 - Create and delegate the pre-existing Cloud DNS zone.
 - Grant the Terraform principal `roles/iam.serviceAccountUser` at project scope
   before the first apply, so it can attach the node service account Terraform creates.
@@ -52,13 +54,15 @@ how many zones are in use.
 
 To move the data plane to another region, change `gcp_region`, either clear
 `node_zones` or set zones of the new region, and use a new non-overlapping
-`network_cidr`. Update the control-plane `registry_allowed_cidrs` to include the
-new CIDR before applying this stack; its wiring precondition checks the pairing.
-The check accepts any allowlist entry that contains `network_cidr`, so a supernet
-such as `10.0.0.0/8` covers a `10.30.0.0/24` data plane. It is skipped entirely
-when the control-plane state exports no `registry_allowed_cidrs` — an older
-control plane, or manual wiring — so a clean apply is not by itself evidence that
-the allowlist is right. The MIG uses create-before-destroy so Terraform can switch the global backend
+`network_cidr`. No allowlist change is needed for another non-overlapping 10/8
+range because the control-plane default `registry_allowed_cidrs` is
+`["10.0.0.0/8"]`. For a CIDR outside 10/8, or when using a narrower explicit
+allowlist, update the control plane before applying this stack; its wiring
+precondition checks the pairing. The check accepts any allowlist entry that
+contains `network_cidr`, not only an exact match. It is skipped entirely when
+the control-plane state exports no `registry_allowed_cidrs` — an older control
+plane, or manual wiring — so a clean apply is not by itself evidence that the
+allowlist is right. The MIG uses create-before-destroy so Terraform can switch the global backend
 service to the replacement MIG before deleting the old one. The regional
 subnet, VPC peering, MIG, and log buckets are recreated; the global tenant IP,
 DNS record, and frontend remain managed in place.

@@ -50,6 +50,13 @@ address that is reachable only from the control-plane VPC and its peers — the
 name is public, the endpoint is not. Use a private zone instead if advertising
 the internal address is unacceptable.
 
+The default control-plane network is `10.20.0.0/24`, and the registry load
+balancer allows the private `10.0.0.0/8` range by default. This means the
+standard data-plane CIDR (`10.30.0.0/24`) and other non-overlapping 10/8
+data-plane CIDRs work without adding CIDRs to either stack's tfvars file. Set
+`registry_allowed_cidrs` explicitly when a narrower registry source allowlist is
+required; every data-plane CIDR must then be covered by that list.
+
 ### 3. Terraform identity permissions
 
 The principal running `apply` needs at minimum:
@@ -193,6 +200,7 @@ terraform output api_url                    # open the UI or configure fireworkc
 terraform output status_domain              # dedicated UI/API hostname
 terraform output operator_token_secret_id   # retrieve explicitly from Secret Manager
 terraform output controlplane_network_self_link # used for private data-plane peering
+terraform output registry_allowed_cidrs     # verify the registry source allowlist
 ```
 
 If `use_control_plane_remote_state = true` in the data-plane (the default), it reads these from `../../control-plane/gcp/terraform.tfstate` automatically — no manual copying needed.

@@ -1,9 +1,9 @@
 gcp_project   = "my-gcp-project"
 gcp_region    = "us-central1"
 dns_zone_name = "firework-gcp"
-# When moving the data plane to another region within the same VPC, choose a
-# non-overlapping range so Terraform can create the new subnet before retiring
-# the old regional MIG. For example: 10.31.0.0/24.
+# The default 10.30.0.0/24 is covered by the control plane's default private
+# 10/8 registry allowlist, so no CIDR entry is needed in this file. When moving
+# the data plane, choose a non-overlapping 10/8 range such as 10.31.0.0/24.
 # network_cidr = "10.31.0.0/24"
 # Single source of truth for wildcard DNS, the wildcard TLS certificate, and the
 # agent ingress_domain. Services route as <subdomain>.<base_domain>.

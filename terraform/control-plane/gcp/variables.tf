@@ -366,6 +366,6 @@ variable "operator_token_secret_id" {
 
 variable "registry_allowed_cidrs" {
   type        = list(string)
-  default     = ["10.30.0.0/24"]
-  description = "Source CIDRs allowed to reach the internal registry load balancer. Keep this aligned with the data-plane network CIDR."
+  default     = ["10.0.0.0/8"]
+  description = "Source CIDRs allowed to reach the internal registry load balancer. The demo default covers private 10/8 data-plane networks; set a narrower list when required."
 }

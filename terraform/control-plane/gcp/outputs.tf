@@ -57,7 +57,7 @@ output "registry_internal_ip" {
 
 output "registry_allowed_cidrs" {
   value       = var.registry_allowed_cidrs
-  description = "CIDRs permitted to reach the internal registry load balancer; the data-plane network CIDR must be included."
+  description = "CIDRs permitted to reach the internal registry load balancer; every data-plane network CIDR must be covered by this list."
 }
 
 output "registry_ca_secret_id" {

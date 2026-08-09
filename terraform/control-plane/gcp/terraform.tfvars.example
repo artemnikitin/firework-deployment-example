@@ -30,6 +30,11 @@ target_branch      = "main"
 # Leave empty (the default) to consume the repository root.
 config_dir = ""
 
+# The default allows non-overlapping private 10/8 data-plane networks, so no
+# CIDR entry is required for the normal demo. Set this only to tighten registry
+# access; every data-plane network_cidr must then be covered by the list.
+# registry_allowed_cidrs = ["10.30.0.0/24"]
+
 # The demo runs all roles in one GKE Deployment. Set this to "split" to retain
 # separate events, registry, controller, and API Deployments with independent
 # replica counts.
