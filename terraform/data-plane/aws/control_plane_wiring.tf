@@ -12,7 +12,12 @@ locals {
   control_plane_state_path_resolved = startswith(local.control_plane_state_path_expanded, "/") ? local.control_plane_state_path_expanded : abspath("${path.module}/${local.control_plane_state_path_expanded}")
 
   control_plane_state_found = fileexists(local.control_plane_state_path_resolved)
-  control_plane_outputs     = local.control_plane_state_found ? try(data.terraform_remote_state.control_plane[0].outputs, {}) : {}
+  # `terraform_remote_state.outputs` is a typed object whose attributes vary
+  # with the control-plane state. Avoid a conditional against `{}` here:
+  # Terraform then tries to unify the full output object with an empty object
+  # and fails before the wiring preconditions can produce a useful message.
+  # `try` also handles the count=0 data source when the state file is absent.
+  control_plane_outputs = try(data.terraform_remote_state.control_plane[0].outputs, {})
 
   effective_s3_configs_bucket_id  = try(local.control_plane_outputs.config_bucket_name, "")
   effective_s3_configs_bucket_arn = try(local.control_plane_outputs.config_bucket_arn, "")
