@@ -18,8 +18,10 @@ The architecture must be consistent across three places:
 | `node_ami_architecture` and `node_instance_type` | data-plane stack |
 | rootfs image set | S3 images bucket (`firework-gitops-example` builds both) |
 
-Host and guest architecture must match, so pointing an x86_64 node at an arm64
-rootfs bucket fails at microVM start, not at deploy time.
+Host and guest architecture must match. One bucket holds both, and the agent
+resolves the `<arch>/` prefix from its own architecture, so a node cannot be
+pointed at the wrong rootfs set. An architecture that has not been published yet
+fails at image sync naming the missing key.
 
 All provisioning scripts in `packer/scripts/` resolve their downloads from
 `uname -m`, so they need no changes between architectures.

@@ -96,28 +96,16 @@ fi
 read_secret "${registry_ca_secret}" > /etc/firework/pki/node-ca.crt
 REGISTRY_BOOTSTRAP_TOKEN=$(read_secret "${registry_bootstrap_secret}")
 
-# The bucket holds every architecture under an <arch>/ key prefix, so copy only
-# this node's prefix and flatten it: the agent resolves images at
-# /var/lib/images/<name>, not /var/lib/images/<arch>/<name>. A bare
-# gs://bucket/*.ext4 matches nothing here, because gcloud's * does not cross a
-# path separator.
-case "$(uname -m)" in
-  x86_64)  IMAGES_ARCH="amd64" ;;
-  aarch64) IMAGES_ARCH="arm64" ;;
-  *)
-    echo "ERROR: unsupported machine architecture: $(uname -m)" >&2
-    exit 1
-    ;;
-esac
-
-# Best-effort prefetch: the agent syncs images itself, so an empty or
-# not-yet-populated prefix must not abort startup before the agent config is
-# written. Without the guard, set -e turns "no URLs matched" into a node that
-# never enrolls.
-if ! gcloud storage cp --no-clobber \
-    "gs://${gcs_images_bucket}/$IMAGES_ARCH/*.ext4" /var/lib/images/; then
-  echo "WARNING: no $IMAGES_ARCH images prefetched from gs://${gcs_images_bucket}/$IMAGES_ARCH/; the agent will sync them" >&2
-fi
+# Rootfs images are not prefetched here. The agent syncs them itself from
+# gcs_images_bucket, and it is the better place to do it: it downloads only the
+# images assigned to this node rather than every image for this architecture,
+# and it maintains the write-token sidecars that let a restart skip unchanged
+# objects.
+#
+# A prefetch here cannot write those sidecars, so every prefetched image was
+# downloaded a second time by the agent moments later. It was also a startup
+# hazard: under `set -e`, a copy that matched nothing aborted this script before
+# the agent config below was written, leaving a node that never enrolled.
 
 cat > /etc/firework/agent.yaml <<EOF
 node_id: "$INSTANCE_NAME"
