@@ -193,8 +193,8 @@ node_ami_architecture      = "arm64"
 and rebuild the AMI with `architecture = "arm64"` (see
 [packer/aws/README.md](../../../packer/aws/README.md)). `s3_images_bucket_id`
 stays as it is: the bucket holds every architecture under an `<arch>/` key
-prefix and the agent reads the prefix matching its own node, so host and guest
-architecture cannot diverge. If the arm64 images have not been published yet,
+prefix, and both the node bootstrap and the agent select the prefix from
+`uname -m`, so host and guest architecture cannot diverge. If the arm64 images have not been published yet,
 the node fails at image sync naming the missing key, rather than at microVM
 start.
 

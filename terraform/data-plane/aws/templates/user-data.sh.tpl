@@ -317,9 +317,25 @@ if [ -x /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl ]; then
 fi
 
 # --- 1. Download rootfs images from S3 ---
-echo "==> Downloading rootfs images from s3://$S3_IMAGES_BUCKET/"
+# The bucket holds every architecture under an <arch>/ key prefix, so sync only
+# this node's prefix and flatten it: the agent resolves images at
+# $IMAGES_DIR/<name>, not $IMAGES_DIR/<arch>/<name>.
+#
+# Syncing the bucket root instead would download every architecture into nested
+# directories the agent never reads, and on a multi-tenant image set that alone
+# can exceed the root volume before the agent fetches the copies it does use.
+case "$(uname -m)" in
+  x86_64)  IMAGES_ARCH="amd64" ;;
+  aarch64) IMAGES_ARCH="arm64" ;;
+  *)
+    echo "ERROR: unsupported machine architecture: $(uname -m)" >&2
+    exit 1
+    ;;
+esac
+
+echo "==> Downloading $IMAGES_ARCH rootfs images from s3://$S3_IMAGES_BUCKET/$IMAGES_ARCH/"
 retry "download rootfs images" 20 5 \
-  aws s3 sync "s3://$S3_IMAGES_BUCKET/" "$IMAGES_DIR/" \
+  aws s3 sync "s3://$S3_IMAGES_BUCKET/$IMAGES_ARCH/" "$IMAGES_DIR/" \
     --region "$S3_REGION" \
     --exclude "*" --include "*.ext4"
 echo "==> Images downloaded"

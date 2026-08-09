@@ -96,7 +96,28 @@ fi
 read_secret "${registry_ca_secret}" > /etc/firework/pki/node-ca.crt
 REGISTRY_BOOTSTRAP_TOKEN=$(read_secret "${registry_bootstrap_secret}")
 
-gcloud storage cp --no-clobber "gs://${gcs_images_bucket}/*.ext4" /var/lib/images/
+# The bucket holds every architecture under an <arch>/ key prefix, so copy only
+# this node's prefix and flatten it: the agent resolves images at
+# /var/lib/images/<name>, not /var/lib/images/<arch>/<name>. A bare
+# gs://bucket/*.ext4 matches nothing here, because gcloud's * does not cross a
+# path separator.
+case "$(uname -m)" in
+  x86_64)  IMAGES_ARCH="amd64" ;;
+  aarch64) IMAGES_ARCH="arm64" ;;
+  *)
+    echo "ERROR: unsupported machine architecture: $(uname -m)" >&2
+    exit 1
+    ;;
+esac
+
+# Best-effort prefetch: the agent syncs images itself, so an empty or
+# not-yet-populated prefix must not abort startup before the agent config is
+# written. Without the guard, set -e turns "no URLs matched" into a node that
+# never enrolls.
+if ! gcloud storage cp --no-clobber \
+    "gs://${gcs_images_bucket}/$IMAGES_ARCH/*.ext4" /var/lib/images/; then
+  echo "WARNING: no $IMAGES_ARCH images prefetched from gs://${gcs_images_bucket}/$IMAGES_ARCH/; the agent will sync them" >&2
+fi
 
 cat > /etc/firework/agent.yaml <<EOF
 node_id: "$INSTANCE_NAME"
