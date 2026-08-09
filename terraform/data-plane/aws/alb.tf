@@ -11,10 +11,14 @@ resource "aws_lb" "main" {
 
   drop_invalid_header_fields = true
 
-  access_logs {
-    enabled = true
-    bucket  = aws_s3_bucket.alb_access_logs.id
-    prefix  = local.alb_access_logs_prefix
+  dynamic "access_logs" {
+    for_each = var.enable_alb_access_logs ? [1] : []
+
+    content {
+      enabled = true
+      bucket  = aws_s3_bucket.alb_access_logs[0].id
+      prefix  = local.alb_access_logs_prefix
+    }
   }
 
   depends_on = [aws_s3_bucket_policy.alb_access_logs]

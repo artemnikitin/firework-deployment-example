@@ -44,11 +44,6 @@ output "registry_url" {
   value       = local.effective_registry_url
 }
 
-output "step_ca_url" {
-  description = "Resolved step-ca URL used by nodes (empty when legacy mode is used)"
-  value       = local.effective_step_ca_url
-}
-
 output "alb_dns" {
   description = "DNS name of the Application Load Balancer"
   value       = aws_lb.main.dns_name
@@ -80,8 +75,8 @@ output "node_firecracker_log_group_name" {
 }
 
 output "alb_access_logs_bucket_name" {
-  description = "S3 bucket receiving ALB access logs"
-  value       = aws_s3_bucket.alb_access_logs.id
+  description = "S3 bucket receiving ALB access logs (null when disabled)"
+  value       = var.enable_alb_access_logs ? aws_s3_bucket.alb_access_logs[0].id : null
 }
 
 output "observability_dashboard_name" {

@@ -1,11 +1,12 @@
 # Control Plane Terraform Stack (ECS)
 
-This stack provisions Firework control plane on ECS/Fargate with **separated roles**:
+This stack provisions Firework control plane on ECS/Fargate. The demo default
+uses one ECS service for every role; a split layout remains available when
+independent scaling or isolation is more important than simplicity:
 
-- `events` service: GitHub webhook ingestion (`/v1/events/github`)
-- `registry` service: node enroll/register/heartbeat APIs (mTLS)
-- `controller` service: leader-elected scheduling/publish loop
-- `api` service: authenticated read-only node/service API and same-origin UI
+- `all` service (default): GitHub webhook ingestion, node registry, controller,
+  and authenticated read-only API/UI in one task
+- `split` mode: separate `events`, `registry`, `controller`, and `api` services
 - shared S3 bucket for control-plane state and rendered `nodes/*.yaml`
 
 ## Architecture
@@ -13,10 +14,15 @@ This stack provisions Firework control plane on ECS/Fargate with **separated rol
 - `events` and `api` share one public HTTPS ALB but use separate origins.
   `events.<domain>/v1/events/github` routes to events and unmatched events-host
   requests return 404; `status.<domain>` routes to the API/UI.
-- `registry` runs behind a TCP NLB (set `registry_internal = true` for private-only exposure)
-- `controller` runs as internal ECS tasks with no load balancer
-- `api` has a separate task role restricted to S3 list/get permissions
-- optional `step-ca` runs as a dedicated ECS service with an NLB endpoint and EFS-backed state
+- `registry` runs behind a public TCP NLB; the control-plane and data-plane
+  currently use separate VPCs, so no private-only option is exposed here
+- `split` mode gives `api` a separate task role restricted to S3 list/get
+  permissions; the combined service deliberately uses the shared control-plane
+  role because all roles share one task
+- Node enrollment uses a bootstrap token plus an enrollment CA. The token is a
+  shared Secrets Manager credential, and the default empty
+  `registry_bootstrap_node_id` allows any node ID to use it. AWS IID-based
+  enrollment is a known gap in this demo.
 
 ## Prerequisites
 
@@ -28,7 +34,8 @@ This stack provisions Firework control plane on ECS/Fargate with **separated rol
 - `status_domain_name` defaults to `status.<events-domain suffix>`; optionally
   override it and/or supply `status_acm_certificate_arn`.
 - GHCR image for control plane (`controlplane_image`)
-- Optional: pre-created Secrets Manager ARNs for webhook/TLS/PKI values.
+- Optional: pre-created Secrets Manager ARNs for webhook/TLS/bootstrap-token
+  enrollment values.
   - If omitted, this stack auto-generates demo secrets when `auto_create_demo_secrets = true` (default).
   - Optional GHCR pull credentials (`controlplane_image_pull_secret_arn`)
   - Optional GitHub token for private config repos
@@ -48,7 +55,11 @@ Everything else can use defaults and auto-generated secrets.
 When `controlplane_image` uses a mutable tag such as `dev`, set
 `controlplane_deployment_revision` to the published image digest after every
 push. Changing the revision forces all control-plane ECS services to start new
-Fargate tasks, which pull the current image.
+Fargate tasks, which pull the current image. Set
+`controlplane_service_mode = "split"` to retain one ECS service per role.
+The `controlplane_*` CPU, memory, and desired-count inputs apply to the default
+combined service; role-specific CPU, memory, and desired-count inputs apply in
+split mode, including multiple instances of each role service.
 
 If you enable `reconcile_on_start`, you must also set `git_repo_url`.
 
@@ -72,28 +83,9 @@ terraform apply
 - `events_domain_name` - custom DNS name for events endpoint (when configured)
 - `generated_github_webhook_secret` - webhook secret value (use this in GitHub when auto-generated)
 - `registry_url` - set in node `agent.yaml` (`registry_url`)
-- `config_bucket_name` + `config_prefix` - set in data-plane stack for agent config polling
-- `step_ca_url` - set in data-plane stack (`step_ca_url`) when using AWS IID node cert bootstrap
-- `step_ca_provisioner_name` - pass to data-plane stack (`step_ca_provisioner`)
-- `step_ca_root_ca_secret_arn` - pass to data-plane stack (`step_ca_root_ca_secret_arn`)
-
-## Optional step-ca PKI service
-
-Set `enable_step_ca = true` to deploy a `smallstep/step-ca` ECS service.
-
-- `step-ca` state is persisted on EFS so CA data survives task restarts.
-- The step-ca bootstrap password is read from `step_ca_password_secret_arn` (or auto-generated when omitted and `auto_create_demo_secrets = true`).
-- The task bootstraps an AWS IID provisioner (`step_ca_aws_provisioner_name`), scoped to `step_ca_aws_account_ids` (or the current account by default).
-- Use `step_ca_internal = true` for private-only endpoint exposure when your node network can route to the control-plane VPC.
-- Keep `step_ca_desired_count = 1`; this setup is single-writer and does not support active-active replicas.
-- When `enable_step_ca = true`, legacy registry enrollment secrets (`registry_enrollment_ca_secret_arn`, `registry_enrollment_ca_key_secret_arn`, `registry_bootstrap_token_secret_arn`) are optional.
-- Registry service trust remains configured by `registry_client_ca_secret_arn`; switching registry mTLS trust to step-ca is a later migration step.
-
-For node bootstrap in the data-plane stack:
-
-- set `step_ca_url` to this stack's `step_ca_url`
-- set `step_ca_root_ca_secret_arn` to a secret containing the step-ca root certificate PEM
-- set `step_ca_provisioner` to `step_ca_provisioner_name`
+- `config_bucket_name` + `config_prefix` - consumed automatically by the data-plane stack
+- `registry_server_name`, `registry_client_ca_secret_arn`, and
+  `registry_bootstrap_token_secret_arn` - consumed automatically by the data-plane stack
 
 ## Configure GitHub Webhook
 
@@ -120,8 +112,10 @@ fireworkctl --endpoint "$(terraform output -raw api_url)" \
   --token-file operator-token nodes
 ```
 
-Rotate access by adding a new secret version and forcing a new API ECS
-deployment. The API task cannot write or delete control-plane state.
+Rotate access by adding a new secret version and forcing a new control-plane
+deployment. In `split` mode the API task cannot write or delete control-plane
+state; the default combined task uses the shared control-plane role for all
+roles, including the controller's write access.
 
 ## Destroy
 
