@@ -86,18 +86,26 @@ flowchart LR
   the exact webhook path, while `status.<domain>` exposes the authenticated
   deployment API and same-origin UI. AWS split mode uses a read-only S3 task
   role for the API; the default combined service shares the control-plane task
-  role. GCP uses a read-only GCS Workload Identity for the status service.
+  role. GCP uses a read-only GCS Workload Identity for the status service in
+  split mode; the default combined service shares the control-plane identity.
 
-For GCP, the control-plane roles run as GKE Autopilot workloads. The events
-webhook and authenticated API/UI use distinct hostnames on one GKE Gateway,
-backed by durable Certificate Manager DNS-authorized certificates and a shared
-static IP from `terraform/events-edge/gcp`; registry remains a TCP
-LoadBalancer. Each role has its own Workload Identity and only the Secret
-Manager CSI mounts it needs. Both
-planes use private VMs/nodes with Cloud NAT; the x86_64 data plane is a regional
-managed instance group using nested virtualization, GCS, and a global HTTPS
-load balancer to Traefik. Terraform state is local in the example stacks. See
-the GCP guides above for container image, DNS delegation, and TLS prerequisites.
+For GCP, the control plane runs by default as one all-role GKE Autopilot
+Deployment with a shared Workload Identity; set `controlplane_service_mode =
+"split"` for one Deployment and identity per role. The events webhook and
+authenticated API/UI use distinct hostnames on one GKE Gateway, backed by
+durable Certificate Manager DNS-authorized certificates and a shared static IP
+from `terraform/events-edge/gcp`. The registry is an internal TCP LoadBalancer.
+The default combined pod deliberately shares the mutating control-plane identity
+needed by events, registry, and controller; use split mode when the public API/UI
+must retain its read-only identity. The data-plane VPC peers with the control-plane
+VPC and uses Private Google Access, so its private regional managed instance group
+needs no Cloud NAT or public node IPs by default. Set `enable_cloud_nat = true`
+when guest workloads or node debugging require public internet egress. Terraform
+state is local in the example stacks. The GCP control-plane registry allowlist
+defaults to private `10.0.0.0/8`, so the standard non-overlapping network CIDRs
+work without CIDR entries in either tfvars file; set an explicit narrower
+`registry_allowed_cidrs` list when required. See the GCP guides above for
+container image, DNS delegation, private peering, and TLS prerequisites.
 
 ## Cleanup
 
