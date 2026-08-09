@@ -113,3 +113,43 @@ resource "aws_security_group" "api_tasks" {
 
   tags = { Name = "${var.project_name}-api-tasks-sg" }
 }
+
+resource "aws_security_group" "controlplane_tasks" {
+  name_prefix = "${var.project_name}-controlplane-tasks-"
+  description = "Combined control-plane ECS tasks"
+  vpc_id      = aws_vpc.controlplane.id
+
+  ingress {
+    description     = "Events HTTPS from events ALB"
+    from_port       = var.events_task_port
+    to_port         = var.events_task_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.events_lb.id]
+  }
+
+  ingress {
+    description = "Registry TLS from allowed clients"
+    from_port   = var.registry_task_port
+    to_port     = var.registry_task_port
+    protocol    = "tcp"
+    cidr_blocks = var.registry_allowed_cidrs
+  }
+
+  ingress {
+    description     = "Status API HTTPS from shared control-plane ALB"
+    from_port       = var.api_task_port
+    to_port         = var.api_task_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.events_lb.id]
+  }
+
+  egress {
+    description = "Allow all outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { Name = "${var.project_name}-controlplane-tasks-sg" }
+}

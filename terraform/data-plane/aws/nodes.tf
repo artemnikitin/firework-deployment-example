@@ -76,11 +76,6 @@ resource "aws_launch_template" "node" {
     s3_region                           = var.aws_region
     registry_url                        = local.effective_registry_url
     registry_server_name                = local.effective_registry_server_name
-    step_ca_url                         = local.effective_step_ca_url
-    step_ca_root_ca_secret_arn          = local.effective_step_ca_root_ca_secret_arn
-    step_ca_provisioner                 = local.effective_step_ca_provisioner
-    step_ca_subject_suffix              = var.step_ca_subject_suffix
-    step_ca_renew_expires_in            = var.step_ca_renew_expires_in
     registry_client_ca_secret_arn       = local.effective_registry_client_ca_secret_arn
     registry_bootstrap_token_secret_arn = local.effective_registry_bootstrap_token_secret_arn
     vm_subnet                           = var.vm_subnet

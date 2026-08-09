@@ -22,10 +22,12 @@ This stack depends on:
 - [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.5
 - AWS credentials with permissions for VPC, EC2, ALB, IAM
 - Control-plane stack already applied
-- By default, this stack auto-wires config/registry/step-ca values from `../../control-plane/aws/terraform.tfstate`
-  (`use_control_plane_remote_state = true`, `control_plane_state_path = "../../control-plane/aws/terraform.tfstate"`)
-  - If your control-plane state lives elsewhere, point `control_plane_state_path` to it or disable auto-wiring and set manual overrides.
-  - For S3 config bucket values, auto-wired control-plane outputs are preferred over manual tfvars when present (to avoid stale overrides).
+- This stack always auto-wires config, registry, and bootstrap-token values from
+  `../../control-plane/aws/terraform.tfstate` (`control_plane_state_path` can
+  point elsewhere). The control-plane state must exist before this stack is
+  planned or applied; duplicate manual overrides are intentionally not supported.
+  If that state is unavailable, restore or relocate the control-plane state before
+  planning this stack; there is no manual-wiring recovery path.
 - Existing S3 images bucket and ARN
 - Firework node AMI source (explicit ID, name pattern lookup, or Packer manifest)
 
@@ -270,7 +272,7 @@ Instances can start while egress routes, NAT gateways, and the S3 endpoint are
 still converging. The ASG waits for route-table associations and the S3 gateway
 endpoint, and node user-data additionally waits for the regional EC2 endpoint
 before doing metadata or storage setup. It then retries AWS API, S3, Secrets Manager,
-package, and step-ca calls with bounded exponential backoff. This keeps a
+and package calls with bounded exponential backoff. This keeps a
 transient network timeout from making cloud-init's one-shot bootstrap fail
 permanently. The launch template gzip-compresses user-data before base64
 encoding so the complete bootstrap remains within EC2's 16 KiB raw-payload
@@ -309,21 +311,16 @@ Notes:
 - For `node_ami_name_pattern`, you can pass a partial name (for example `firework-node`); Terraform automatically searches as `*firework-node*`.
 - Pattern lookup uses owners from `node_ami_owners` (default `["self"]`) and architecture `node_ami_architecture` (default `x86_64`).
 
-## Node certificate bootstrap modes
+## Node certificate bootstrap
 
-Two certificate bootstrap modes are supported for registry mTLS:
-
-- Preferred: `step-ca` AWS IID mode
-  - Auto-wired from control-plane outputs when available (`step_ca_url`, `step_ca_root_ca_secret_arn`, `step_ca_provisioner_name`)
-  - You can still override with explicit tfvars values
-  - Node obtains cert/key using `step ca certificate --provisioner <aws-iid>`
-  - Node runs `step ca renew --daemon` for automatic renewal
-  - Node does **not** need `registry_bootstrap_token_secret_arn`
-  - Ensure the registry service trusts the same CA root before enabling this mode
-- Legacy: registry enrollment token mode
-  - Auto-wired from control-plane outputs when available (`registry_client_ca_secret_arn`, `registry_bootstrap_token_secret_arn`)
-  - You can still override with explicit tfvars values
-  - Agent enrolls directly with the registry endpoint
+AWS nodes use the registry bootstrap-token enrollment path. The data plane
+reads `registry_url`, `registry_server_name`,
+`registry_client_ca_secret_arn`, and `registry_bootstrap_token_secret_arn`
+from the control-plane state and passes them to user-data. The node downloads
+the trust root and token from Secrets Manager, enrolls directly with the
+registry, and then uses the issued mTLS certificate for register/heartbeat
+traffic. The shared bootstrap token is a demo trade-off; restrict it with
+`registry_bootstrap_node_id` when practical.
 
 ## Deploy
 
@@ -341,7 +338,7 @@ This stack now provisions basic runtime observability:
 
 - CloudWatch dashboard for node + ALB signals
 - CloudWatch log groups for `firework-agent` and Firecracker VM logs
-- ALB access logs in an S3 bucket
+- ALB access logs in an S3 bucket when `enable_alb_access_logs = true` (the default)
 - CloudWatch metric filters for common `firework-agent` error patterns
 - CloudWatch metric filters for controller errors that read `/ecs/<project>/controlplane-controller` (created by the control-plane stack)
 

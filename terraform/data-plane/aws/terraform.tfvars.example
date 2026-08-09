@@ -24,33 +24,9 @@ domain_name = "example.com"
 # an AZ dependency and cross-AZ charges for non-S3 egress.
 # nat_gateway_mode = "per_az"
 
-# Auto-wire control-plane outputs from local state (recommended).
-# If your control-plane state is elsewhere, update control_plane_state_path or
-# set use_control_plane_remote_state = false and provide manual overrides below.
-use_control_plane_remote_state = true
-control_plane_state_path       = "../../control-plane/aws/terraform.tfstate"
-
-# Optional manual overrides (normally auto-wired from control-plane outputs):
-# Note: when control-plane outputs are present, they are preferred for
-# s3_configs_bucket_id/s3_configs_bucket_arn/s3_configs_prefix.
-# s3_configs_bucket_id  = "firework-example-configs-xxxx"
-# s3_configs_bucket_arn = "arn:aws:s3:::firework-example-configs-xxxx"
-# s3_configs_prefix     = "cp/v1/"
-# registry_url          = "https://registry.example.com:9443"
-# registry_server_name  = "registry.example.com"
-
-# Preferred: step-ca bootstrap (AWS IID, no registry bootstrap token on nodes).
-# Usually auto-wired from control-plane outputs; uncomment only to override.
-# step_ca_url                = "https://pki.example.internal:9000"
-# step_ca_root_ca_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:firework-step-ca-root-ca-xxxxx"
-# step_ca_provisioner        = "aws-iid"
-# step_ca_subject_suffix     = ".node.firework.internal"
-# step_ca_renew_expires_in   = "8h"
-
-# Legacy fallback (registry enrollment token path).
-# Usually auto-wired from control-plane outputs; uncomment only to override.
-# registry_client_ca_secret_arn       = "arn:aws:secretsmanager:us-east-1:123456789012:secret:firework-node-client-ca-xxxxx"
-# registry_bootstrap_token_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:firework-bootstrap-token-xxxxx"
+# Control-plane outputs are mandatory and are read from this local state file.
+# The data plane no longer accepts duplicate manual registry/config overrides.
+control_plane_state_path = "../../control-plane/aws/terraform.tfstate"
 
 # Pre-existing images bucket managed by CI (not created by Terraform).
 # Create once: aws s3 mb s3://<name> --region us-east-1
@@ -72,6 +48,10 @@ s3_images_bucket_arn = "arn:aws:s3:::your-images-bucket-name"
 # packer_manifest_path    = "../../../packer/aws/manifest.json"
 
 node_key_name = "my-key-pair"
+
+# ALB access logs are enabled by default. Set false to omit the six managed S3
+# logging resources and the ALB access_logs configuration.
+# enable_alb_access_logs = false
 
 # Instance type must expose /dev/kvm for Firecracker: either a bare-metal type,
 # or a virtual Intel type with node_nested_virtualization = true.
