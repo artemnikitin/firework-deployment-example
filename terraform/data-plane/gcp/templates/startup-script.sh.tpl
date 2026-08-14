@@ -96,7 +96,16 @@ fi
 read_secret "${registry_ca_secret}" > /etc/firework/pki/node-ca.crt
 REGISTRY_BOOTSTRAP_TOKEN=$(read_secret "${registry_bootstrap_secret}")
 
-gcloud storage cp --no-clobber "gs://${gcs_images_bucket}/*.ext4" /var/lib/images/
+# Rootfs images are not prefetched here. The agent syncs them itself from
+# gcs_images_bucket, and it is the better place to do it: it downloads only the
+# images assigned to this node rather than every image for this architecture,
+# and it maintains the write-token sidecars that let a restart skip unchanged
+# objects.
+#
+# A prefetch here cannot write those sidecars, so every prefetched image was
+# downloaded a second time by the agent moments later. It was also a startup
+# hazard: under `set -e`, a copy that matched nothing aborted this script before
+# the agent config below was written, leaving a node that never enrolled.
 
 cat > /etc/firework/agent.yaml <<EOF
 node_id: "$INSTANCE_NAME"

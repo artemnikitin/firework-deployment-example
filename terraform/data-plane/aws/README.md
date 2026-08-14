@@ -182,7 +182,7 @@ performance sensitive or have strict latency requirements, so **do not use this
 stack to benchmark microVM boot latency.**
 
 To go back to bare-metal Graviton nodes, three settings must change together,
-plus the AMI and the image bucket:
+plus the AMI:
 
 ```hcl
 node_instance_type         = "c6g.metal"
@@ -191,9 +191,12 @@ node_ami_architecture      = "arm64"
 ```
 
 and rebuild the AMI with `architecture = "arm64"` (see
-[packer/aws/README.md](../../../packer/aws/README.md)) and point
-`s3_images_bucket_id` at the arm64 rootfs bucket. Host and guest architecture
-must match; a mismatch fails at microVM start, not at deploy time.
+[packer/aws/README.md](../../../packer/aws/README.md)). `s3_images_bucket_id`
+stays as it is: the bucket holds every architecture under an `<arch>/` key
+prefix, and the agent resolves the prefix from its own binary's architecture, so
+host and guest architecture cannot diverge. If the arm64 images have not been
+published yet, the node fails at image sync naming the missing key, rather than
+at microVM start.
 
 **Delete or rebuild `packer/aws/manifest.json` when switching architecture.**
 `use_packer_manifest_ami` defaults to `true`, so a stale manifest left over from
@@ -239,8 +242,9 @@ node_ami_architecture      = "arm64"
 That reproduces the previous topology exactly, so the upgrade is a no-op. Change
 them one at a time when you are ready, and expect nodes to be replaced.
 
-Switching architecture additionally requires rebuilding the AMI and repointing
-`s3_images_bucket_id` at a matching rootfs image set, as described above.
+Switching architecture additionally requires rebuilding the AMI, as described
+above. `s3_images_bucket_id` does not change: one bucket holds every
+architecture.
 
 #### Subnet keys changed from index to availability zone
 
