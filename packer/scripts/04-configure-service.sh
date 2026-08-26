@@ -40,6 +40,19 @@ RestartSec=5
 LimitNOFILE=65535
 LimitNPROC=65535
 
+# Volume work runs mkfs.ext4, e2fsck, and resize2fs as child processes, and the
+# agent deliberately detaches them from its own shutdown so a restart or drain
+# cannot interrupt a resize partway through. systemd's default
+# KillMode=control-group defeats that: it signals every process in the cgroup,
+# including the detached utility, and force-kills the group at TimeoutStopSec.
+#
+# KillMode=mixed sends SIGTERM to the agent only. TimeoutStopSec must stay above
+# the agent's destructive-command deadline (destructiveCommandTimeout, 30m in
+# internal/volume) plus its grace period, or systemd kills the utility anyway.
+# See docs/persistent-volumes.md in the firework repository.
+KillMode=mixed
+TimeoutStopSec=2100
+
 # Security hardening
 NoNewPrivileges=no
 ProtectSystem=false
