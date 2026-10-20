@@ -14,6 +14,7 @@ SHARED_STORAGE_BACKEND_ID="${shared_storage_backend_id}"
 SHARED_STORAGE_CAPACITY="${shared_storage_capacity}"
 FILESTORE_IP="${filestore_ip}"
 FILESTORE_SHARE="${filestore_share}"
+NODE_LABELS="${node_labels}"
 
 read_secret() {
   gcloud secrets versions access latest --project="$PROJECT" --secret="$1"
@@ -137,6 +138,16 @@ registry_key_file: "/etc/firework/pki/node.key"
 registry_ca_file: "/etc/firework/pki/node-ca.crt"
 registry_bootstrap_token: "$REGISTRY_BOOTSTRAP_TOKEN"
 EOF
+
+# node_names stays the instance identity because it names the nodes/<node>.yaml
+# object the controller renders for this node. node_labels are the scheduling
+# capabilities matched against workload node_type.
+{
+  echo "node_labels:"
+  for label in $NODE_LABELS; do
+    printf '  - "%s"\n' "$label"
+  done
+} >> /etc/firework/agent.yaml
 
 if [ "$LOCAL_STORAGE_ENABLED" = "true" ] || [ "$SHARED_STORAGE_ENABLED" = "true" ]; then
   cat >> /etc/firework/agent.yaml <<'STORAGEHEADER'

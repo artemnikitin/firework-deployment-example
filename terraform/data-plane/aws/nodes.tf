@@ -93,6 +93,8 @@ resource "aws_launch_template" "node" {
     shared_storage_capacity             = var.shared_storage_capacity
     efs_file_system_id                  = var.enable_shared_storage ? aws_efs_file_system.shared[0].id : ""
     efs_access_point_id                 = var.enable_shared_storage && var.shared_storage_use_access_point ? aws_efs_access_point.shared[0].id : ""
+    # Validated as DNS labels, so a space-separated list is unambiguous.
+    node_labels = join(" ", var.node_labels)
   }))
 
   tag_specifications {

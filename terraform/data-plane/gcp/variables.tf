@@ -102,6 +102,19 @@ variable "enable_shared_storage" {
   description = "Provision Regional Filestore with NFSv4.1 and mount it on every node."
 }
 
+variable "node_labels" {
+  description = "Scheduling labels every node registers with the Firework control plane. The scheduler places a service only on nodes whose labels include its node_type, so this must cover every node_type in the GitOps repository. The default matches firework-gitops-example."
+  type        = list(string)
+  default     = ["web", "backend"]
+
+  validation {
+    condition = length(var.node_labels) > 0 && alltrue([
+      for label in var.node_labels : can(regex("^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$", label))
+    ])
+    error_message = "node_labels must be a non-empty list of lowercase DNS-label values (1-63 letters, digits, or internal '-')."
+  }
+}
+
 variable "shared_storage_backend_id" {
   type        = string
   default     = "primary"

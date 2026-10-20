@@ -8,7 +8,8 @@ set -euo pipefail
 # systemd services baked in (built by Packer). This script:
 #   1. Gets the instance ID from EC2 metadata
 #   2. Downloads rootfs images from S3
-#   3. Writes the node-specific agent config (with instance ID as node name)
+#   3. Writes the node-specific agent config (instance ID as node name, plus
+#      the scheduling labels the node advertises)
 #   4. Bootstraps node certificates with the registry bootstrap token
 #   5. Configures and starts the CloudWatch Agent (logs + Prometheus metrics)
 #   6. Starts Traefik and the firework-agent
@@ -36,6 +37,7 @@ SHARED_STORAGE_BACKEND_ID="${shared_storage_backend_id}"
 SHARED_STORAGE_CAPACITY="${shared_storage_capacity}"
 EFS_FILE_SYSTEM_ID="${efs_file_system_id}"
 EFS_ACCESS_POINT_ID="${efs_access_point_id}"
+NODE_LABELS="${node_labels}"
 REGISTRY_CA_FILE="/etc/firework/pki/node-ca.crt"
 REGISTRY_CERT_FILE="/etc/firework/pki/node.crt"
 REGISTRY_KEY_FILE="/etc/firework/pki/node.key"
@@ -386,6 +388,16 @@ out_interface: "$PRIMARY_IF"
 traefik_config_dir: "$TRAEFIK_CONFIG_DIR"
 ingress_domain: "$INGRESS_DOMAIN"
 AGENTCFG
+
+# node_names stays the instance identity because it names the nodes/<node>.yaml
+# object the controller renders for this node. node_labels are the scheduling
+# capabilities matched against workload node_type.
+{
+  echo "node_labels:"
+  for label in $NODE_LABELS; do
+    printf '  - "%s"\n' "$label"
+  done
+} >> /etc/firework/agent.yaml
 
 if [ "$LOCAL_STORAGE_ENABLED" = "true" ] || [ "$SHARED_STORAGE_ENABLED" = "true" ]; then
   cat >> /etc/firework/agent.yaml <<'STORAGEHEADER'
