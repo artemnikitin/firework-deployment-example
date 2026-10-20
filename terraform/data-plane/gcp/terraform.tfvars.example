@@ -37,6 +37,10 @@ node_zones = [
 ]
 
 # Persistent storage is disabled by default. Enable either block independently.
+# Scheduling labels every node advertises; must cover every node_type in the
+# GitOps repository. See "Scheduling labels" in the README.
+# node_labels = ["web", "backend"]
+
 # Local volumes use a retained stateful Hyperdisk Balanced disk per MIG instance.
 # enable_local_storage   = true
 # local_storage_size_gib = 500

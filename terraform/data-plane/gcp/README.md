@@ -144,6 +144,28 @@ instance without weakening Firework's fail-closed behavior for ordinary node
 loss. Filestore deletion protection defaults to true; disable it only for
 deliberate teardown.
 
+## Scheduling labels
+
+The Firework controller places a service only on nodes whose registered labels
+include the service's `node_type`. Each node writes `node_labels` into
+`/etc/firework/agent.yaml` from the `node_labels` variable; `node_names` stays
+the instance name, because it names the `nodes/<node>.yaml` object the controller
+renders for that node.
+
+- The default, `["web", "backend"]`, covers every `node_type` used by
+  [firework-gitops-example](https://github.com/artemnikitin/firework-gitops-example).
+  Add any other `node_type` your GitOps repository uses; a service whose type
+  no node advertises stays `pending` with `no_matching_node_type`, and its VM
+  is stopped.
+- This stack has one node pool, so every node advertises every label.
+- Values must be lowercase DNS labels (1-63 letters, digits, or internal `-`).
+- Labels are read when the agent registers. Changing the variable changes the instance template, so the MIG update replaces every node;
+  a node updated with `scripts/push-agent-to-node.sh` keeps its existing
+  `agent.yaml`, so add `node_labels` there and restart the agent.
+- Agents older than this contract ignore `node_labels` and report `node_names`
+  instead. Upgrade agents before, or together with, the control plane that
+  enforces `node_type`.
+
 ## Routing domain
 
 `base_domain` (for example `gcp.example.com`) is the single source of truth for
