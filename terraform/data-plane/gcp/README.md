@@ -22,12 +22,17 @@ Prerequisites:
 - Grant the Terraform principal `roles/iam.serviceAccountUser` at project scope
   before the first apply, so it can attach the node service account Terraform creates.
 
-The default node count is three because the six demo services request 18 vCPUs
-and each `n4-standard-8` node provides 8 vCPUs. N4 requires a Packer image
+The default node count is three: the current seven GitOps demo services request
+19 vCPUs in total, and each `n4-standard-8` node provides 8 vCPUs. Placement must
+also keep services with repeated Elasticsearch host-port claims on separate
+nodes; aggregate CPU alone does not establish feasibility. N4 requires a Packer image
 advertising gVNIC support plus Hyperdisk and gVNIC in the instance template.
-Compute Engine selects its required NVMe disk interface automatically. Updates
-create one replacement in each selected zone before old nodes are removed, so
-ensure quota for three temporary surge nodes. Use four nodes for N+1 capacity.
+Compute Engine selects its required NVMe disk interface automatically. With
+local storage disabled, updates create one replacement in each selected zone
+before removing old nodes, so reserve surge quota for the selected zone count.
+Local storage uses the non-surge rollout described below. A fourth node adds
+spare compute capacity, but a service with a local volume still cannot fail
+over away from the node holding its data.
 
 Before changing an existing deployment to N4, confirm that the selected node
 image declares the `GVNIC` guest OS feature. Images built by this Packer

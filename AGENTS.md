@@ -6,7 +6,7 @@ This is an example AWS and GCP deployment for Firework using Packer and Terrafor
 
 ## Layout
 
-- `packer/`: ARM64 Firework node AMI with Firecracker, kernel, agent, Traefik, and SSM.
+- `packer/`: x86_64 Firework node images for AWS and GCP, with ARM64 also supported on AWS; includes Firecracker, kernel, agent, Traefik, and provider access tooling.
 - `terraform/control-plane/`: ECS/Fargate or GKE control plane, one all-role service by default (with an optional split layout), state/config bucket, and provider-specific edge wiring.
 - `terraform/data-plane/`: provider VPC/network, load balancers, node groups, and node IAM/security groups.
 - `iam-policies/`: example IAM policies for CI/deploy users.

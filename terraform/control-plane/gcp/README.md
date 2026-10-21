@@ -77,7 +77,10 @@ The principal running `apply` needs at minimum:
 
 **`projectIamAdmin` is mandatory.** The stack grants project-level `roles/logging.logWriter` and `roles/monitoring.metricWriter` to the runtime service account. Without `projectIamAdmin`, those `google_project_iam_member` resources fail with `403 The caller does not have permission` even though all other resource-scoped IAM bindings succeed.
 
-> **Tip:** If `GOOGLE_IMPERSONATE_SERVICE_ACCOUNT` or `GOOGLE_APPLICATION_CREDENTIALS` is set in your shell, Terraform runs as that service account, not your gcloud user. Verify the effective identity with `gcloud auth list` in the apply shell.
+> **Tip:** Check Terraform's credentials and impersonation configuration using
+> the [effective-credentials checklist](../../../iam-policies/gcp/README.md#effective-credentials).
+> `gcloud auth list` shows gcloud's account, which can differ from Terraform's
+> effective identity.
 
 ### 4. Pre-create the webhook secret
 
@@ -212,8 +215,8 @@ exposed publicly. The events hostname routes only the exact webhook path, while
 the status hostname routes to the authenticated API/UI. The registry uses an
 internal TCP load balancer. The data-plane stack creates both directions of
 VPC peering from the control-plane state output and reaches the registry over
-that private path. The data-plane stack owns both peering resources; deploy the
-data plane before destroying the control plane so the peering is removed first.
+that private path. The data-plane stack owns both peering resources; destroy the
+data plane before the control plane so the peering is removed first.
 
 ### Migrating an existing split deployment
 
@@ -252,14 +255,23 @@ fireworkctl --endpoint "$(terraform output -raw api_url)" \
 
 ## Teardown
 
-The state/config bucket has versioning enabled and `force_destroy` defaults to `false`. A plain `terraform destroy` fails unless `state_bucket_force_destroy = true` is set (it is in `terraform.tfvars`):
-
-```bash
-terraform destroy
-```
-
 When a data plane exists, destroy it first; its stack owns the VPC peering
 resources attached to the control-plane VPC.
+
+The state/config bucket has versioning enabled and `state_bucket_force_destroy`
+defaults to `false`. The tracked `terraform.tfvars.example` leaves this
+protection enabled. A nonempty bucket therefore blocks a plain destroy.
+For a deliberate teardown that permanently deletes its objects and versions,
+run these commands from this stack directory:
+
+```bash
+terraform apply -var='state_bucket_force_destroy=true' -target=google_storage_bucket.state
+terraform destroy -var='state_bucket_force_destroy=true'
+```
+
+The first apply records the changed bucket setting before destroy removes the
+resource. Retain the separate Events edge and DNS foundation during ordinary
+control-plane rebuilds.
 
 ## Getting access to underlying Kubernetes cluster
 
