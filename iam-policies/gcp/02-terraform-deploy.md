@@ -31,10 +31,10 @@ CSI and are not read into Terraform state.
 
 ## Granting via CLI
 
-Grant the identity Terraform authenticates as — your user account when using
-`gcloud auth application-default login`, or the service account referenced by
-`GOOGLE_APPLICATION_CREDENTIALS`. Confirm it with `gcloud config get-value
-account`.
+Grant the identity selected by Terraform's credentials and impersonation
+configuration. Use the [effective-credentials checklist](README.md#effective-credentials)
+before choosing `PRINCIPAL`; the active gcloud account alone does not establish
+Terraform's identity.
 
 Project-level roles:
 

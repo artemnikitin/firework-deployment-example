@@ -21,10 +21,9 @@ it the build fails early with:
 Error importing SSH public key for OSLogin: no PosixAccounts available
 ```
 
-Grant the role to the **identity Packer actually authenticates as** — your user
-account when using `gcloud auth application-default login`, or the service
-account referenced by `GOOGLE_APPLICATION_CREDENTIALS`. Confirm it with
-`gcloud config get-value account`.
+Grant the role to the **identity Packer actually authenticates as**. Follow the
+[effective-credentials checklist](README.md#effective-credentials); gcloud's
+active account does not establish Packer's ADC or impersonated identity.
 
 ## Using a dedicated build service account (impersonation)
 

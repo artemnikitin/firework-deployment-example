@@ -366,11 +366,13 @@ This stack now provisions basic runtime observability:
 - CloudWatch log groups for `firework-agent` and Firecracker VM logs
 - ALB access logs in an S3 bucket when `enable_alb_access_logs = true` (the default)
 - CloudWatch metric filters for common `firework-agent` error patterns
-- CloudWatch metric filters for controller errors that read `/ecs/<project>/controlplane-controller` (created by the control-plane stack)
+- CloudWatch metric filters for controller errors in the log group exported by the control-plane stack as `controlplane_log_group_name` (the combined service by default)
 
 ## Debugging
 
-Whatever `node_network_placement` is set to, all node access goes through AWS Systems Manager Session Manager — no SSH, no bastion.
+Whatever `node_network_placement` is set to, node access goes through AWS
+Systems Manager Session Manager, with no public SSH or bastion. The debug
+deployment helper below uses SSH tunneled over SSM.
 
 ### Connect to a node
 
@@ -392,11 +394,17 @@ systemctl status firework-agent
 
 ```bash
 # Stream live
-journalctl -u firework-agent -f
+sudo tail -f /var/log/firework-agent.log
 
 # Last 100 lines
-journalctl -u firework-agent -n 100 --no-pager
+sudo tail -n 100 /var/log/firework-agent.log
 ```
+
+AWS user-data redirects the agent's stdout and stderr to this file through
+`10-file-logging.conf`; `journalctl -u firework-agent` still shows systemd
+lifecycle messages, but not the agent's application output after bootstrap.
+CloudWatch collects the same application log file. GCP nodes retain journal
+logging and use `journalctl -u firework-agent`.
 
 Key things to look for in logs:
 - `microVM started` — VM launched successfully
@@ -476,7 +484,8 @@ handles routing for both its own locally-scheduled services and services schedul
 on peer nodes.
 
 For remote services, the agent reads all rendered node configs from S3, and for
-each peer service that has a `metadata.host` and at least one `port_forwards` entry,
+each peer service that has either `metadata.subdomain` or `metadata.host` and
+at least one `port_forwards` entry,
 it writes a `remote-{service}.yaml` Traefik dynamic config file that proxies requests
 to the peer node's host IP and forwarded port. Traefik watches the directory and picks
 up the change without a reload.
@@ -489,6 +498,9 @@ Remaining constraints:
   (set automatically from the registry when nodes send heartbeats).
 - The remote service must have at least one `port_forwards` entry so the host-side port
   is known.
+- `metadata.subdomain` resolves through the deployment's `ingress_domain`, just
+  as it does for local routes. Exact `metadata.host` routes require compatible
+  DNS and TLS provisioned separately.
 
 ## Persistent storage
 
