@@ -21,18 +21,37 @@ This is an example AWS and GCP deployment for Firework using Packer and Terrafor
 - When doing changes make sure that all the needed permissions are updated in `iam-policies/`.
 - Make sure to keep the permissions in `iam-policies/` files below 6144 characters per policy (this is AWS limit).
 
+## Shared contracts
+
+- When changing configuration, identity, ports, or control-plane outputs, trace
+  the affected Terraform stacks, startup templates, IAM/firewalls, and core
+  Firework consumers. Keep both providers aligned where they share the contract.
+- For architecture changes, check the Packer image, instance type, kernel,
+  Firecracker/agent binaries, and GitOps rootfs/guest-init architecture together.
+  Required images must be published under the matching architecture prefix before
+  nodes use them. Report companion changes and rollout ordering; unrelated changes
+  do not require a cross-repository audit.
+
 ## Validation
 
-Run from the relevant stack directory:
+Select checks for the changed files. Paths below are relative to the repository
+root; run each command from the working directory listed.
 
-- `terraform fmt -check -recursive .`
-- `terraform init -backend=false`
-- `terraform validate`
-- `tflint --init && tflint`
-- `packer fmt -check .`
-- `packer init . && packer validate .`
-- `shellcheck packer/scripts/*.sh terraform/data-plane/templates/user-data.sh.tpl`
+| Change | Working directory | Checks |
+| --- | --- | --- |
+| Documentation only | Repository root | Check formatting and links; verify changed commands, paths, defaults, and behavioral claims against source. No Terraform/Packer execution required. |
+| Terraform | Each affected `terraform/control-plane/{aws,gcp}`, `terraform/data-plane/{aws,gcp}`, or `terraform/dns-foundation` directory | `terraform fmt -check -recursive .`, `terraform init -backend=false`, `terraform validate`, then `tflint --init && tflint` |
+| AWS Packer | `packer/aws` | `packer fmt -check .`, `packer init .`, then `packer validate .` |
+| GCP Packer | `packer/gcp` | `packer fmt -check .`, `packer init .`, then `packer validate -var=gcp_project=test-project .` |
+| Packer shell scripts | Repository root | `shellcheck packer/aws/*.sh packer/gcp/*.sh packer/scripts/*.sh` |
+| Node startup templates | Repository root | `shellcheck terraform/data-plane/aws/templates/user-data.sh.tpl terraform/data-plane/gcp/templates/startup-script.sh.tpl` |
+
+For shared scripts or wiring changes, include every affected provider/stack.
+Terraform validation and linting do not establish that real remote-state outputs,
+permissions, bootstrap, or deployment behavior work. For wiring changes, inspect
+both the exported outputs and their consumers, including absent and populated
+state paths. Report checks performed and any remaining deployment verification.
 
 For CI-equivalent local validation run the logic/steps from `.github/workflows/ci.yaml`.
 
-Only run `terraform plan/apply/destroy`, `packer build`, AWS CLI mutations, or `scripts/push-agent-to-node.sh` when explicitly requested.
+Only run `terraform plan/apply/destroy`, `packer build`, AWS/GCP CLI mutations, or `scripts/push-agent-to-node.sh` when explicitly requested. Cloud validation can be batched across changes; it is not required for every edit.
