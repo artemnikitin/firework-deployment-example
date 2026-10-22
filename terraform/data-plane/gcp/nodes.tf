@@ -103,6 +103,8 @@ resource "google_compute_instance_template" "node" {
     # is evaluating the destroy configuration.
     filestore_ip    = try(google_filestore_instance.shared[0].networks[0].ip_addresses[0], "")
     filestore_share = try(google_filestore_instance.shared[0].file_shares[0].name, "")
+    # Validated as DNS labels, so a space-separated list is unambiguous.
+    node_labels = join(" ", var.node_labels)
   })
 
   lifecycle {

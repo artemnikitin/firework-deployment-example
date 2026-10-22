@@ -84,6 +84,10 @@ node_count = 2
 # shared_storage_capacity        = "1Ti" # optional admission/cost budget
 # shared_storage_use_access_point = true
 
+# Scheduling labels every node advertises; must cover every node_type in the
+# GitOps repository. See "Scheduling labels" in the README.
+# node_labels = ["web", "backend"]
+
 # Guest networking (defaults match the agent's built-in defaults).
 # vm_subnet  = "172.16.0.0/24"
 # vm_gateway = "172.16.0.1"
