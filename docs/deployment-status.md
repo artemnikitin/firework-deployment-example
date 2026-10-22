@@ -61,7 +61,7 @@ fireworkctl --endpoint "$STATUS_URL" --token-file "$TOKEN_FILE" nodes
 ```
 
 For a persistent CLI configuration and command examples, see the
-[`fireworkctl` user guide](https://github.com/artemnikitin/firework/blob/deployment-status/docs/fireworkctl.md).
+[`fireworkctl` user guide](https://github.com/artemnikitin/firework/blob/main/docs/fireworkctl.md).
 
 Keep the token file mode `0600` and out of source control. If the token is
 rotated, publish a new secret version and restart the control-plane API role so

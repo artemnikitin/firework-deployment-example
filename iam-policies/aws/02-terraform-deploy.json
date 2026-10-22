@@ -73,6 +73,8 @@
         "autoscaling:Describe*",
         "autoscaling:CreateAutoScalingGroup",
         "autoscaling:UpdateAutoScalingGroup",
+        "autoscaling:StartInstanceRefresh",
+        "autoscaling:CancelInstanceRefresh",
         "autoscaling:DeleteAutoScalingGroup",
         "autoscaling:CreateLaunchConfiguration",
         "autoscaling:DeleteLaunchConfiguration",
