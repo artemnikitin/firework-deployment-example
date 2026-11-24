@@ -9,6 +9,13 @@ controlplane_image = "ghcr.io/your-org/firework-controlplane:latest"
 # so Terraform replaces the running ECS tasks.
 # controlplane_deployment_revision = "sha256:0123456789abcdef"
 
+# Optional overrides for Firework builds that support node retirement.
+# Both durations must exceed node_stale_ttl (45s by default).
+# node_down_retention      = "24h"
+# node_stale_retention     = "168h"
+# node_retirement_enabled = false
+# node_retirement_dry_run = true
+
 # Events HTTPS listener certificate:
 # Optionally provide an existing ACM cert ARN; otherwise the stack creates one.
 # events_acm_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"

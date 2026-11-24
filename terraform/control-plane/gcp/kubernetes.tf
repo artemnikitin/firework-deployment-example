@@ -18,6 +18,8 @@ locals {
     leader_lease_ttl           = var.leader_lease_ttl
     leader_renew_interval      = var.leader_renew_interval
     node_stale_ttl             = var.node_stale_ttl
+    node_down_retention        = var.node_down_retention
+    node_stale_retention       = var.node_stale_retention
     controller_tick            = var.controller_tick
     target_branch              = var.target_branch
     config_dir                 = var.config_dir
@@ -44,6 +46,8 @@ locals {
     leader_lease_ttl      = var.leader_lease_ttl
     leader_renew_interval = var.leader_renew_interval
     node_stale_ttl        = var.node_stale_ttl
+    node_down_retention   = var.node_down_retention
+    node_stale_retention  = var.node_stale_retention
     controller_tick       = var.controller_tick
     tls = {
       cert_file      = "${local.secrets_mount}/tls/server.crt"
@@ -70,10 +74,14 @@ locals {
         project = var.gcp_project
       }
     }
-    leader_lease_ttl      = var.leader_lease_ttl
-    leader_renew_interval = var.leader_renew_interval
-    node_stale_ttl        = var.node_stale_ttl
-    controller_tick       = var.controller_tick
+    leader_lease_ttl        = var.leader_lease_ttl
+    leader_renew_interval   = var.leader_renew_interval
+    node_stale_ttl          = var.node_stale_ttl
+    node_down_retention     = var.node_down_retention
+    node_stale_retention    = var.node_stale_retention
+    node_retirement_enabled = var.node_retirement_enabled
+    node_retirement_dry_run = var.node_retirement_dry_run
+    controller_tick         = var.controller_tick
   })
 
   api_config = yamlencode({
@@ -88,8 +96,10 @@ locals {
         project = var.gcp_project
       }
     }
-    node_stale_ttl      = var.node_stale_ttl
-    operator_token_file = "${local.secrets_mount}/secrets/operator-token"
+    node_stale_ttl       = var.node_stale_ttl
+    node_down_retention  = var.node_down_retention
+    node_stale_retention = var.node_stale_retention
+    operator_token_file  = "${local.secrets_mount}/secrets/operator-token"
     tls = {
       cert_file = "${local.secrets_mount}/tls/server.crt"
       key_file  = "${local.secrets_mount}/tls/server.key"
@@ -113,6 +123,10 @@ locals {
     leader_lease_ttl           = var.leader_lease_ttl
     leader_renew_interval      = var.leader_renew_interval
     node_stale_ttl             = var.node_stale_ttl
+    node_down_retention        = var.node_down_retention
+    node_stale_retention       = var.node_stale_retention
+    node_retirement_enabled    = var.node_retirement_enabled
+    node_retirement_dry_run    = var.node_retirement_dry_run
     controller_tick            = var.controller_tick
     target_branch              = var.target_branch
     config_dir                 = var.config_dir
@@ -459,6 +473,7 @@ resource "kubernetes_deployment" "events" {
         labels = merge(local.common_labels, { role = "events" })
         annotations = {
           "firework.artemnikitin.com/controlplane-deployment-revision" = var.controlplane_deployment_revision
+          "firework.artemnikitin.com/controlplane-config-sha256"       = sha256(local.events_config)
         }
       }
       spec {
@@ -569,6 +584,7 @@ resource "kubernetes_deployment" "registry" {
         labels = merge(local.common_labels, { role = "registry" })
         annotations = {
           "firework.artemnikitin.com/controlplane-deployment-revision" = var.controlplane_deployment_revision
+          "firework.artemnikitin.com/controlplane-config-sha256"       = sha256(local.registry_config)
         }
       }
       spec {
@@ -663,6 +679,7 @@ resource "kubernetes_deployment" "controller" {
         labels = merge(local.common_labels, { role = "controller" })
         annotations = {
           "firework.artemnikitin.com/controlplane-deployment-revision" = var.controlplane_deployment_revision
+          "firework.artemnikitin.com/controlplane-config-sha256"       = sha256(local.controller_config)
         }
       }
       spec {
@@ -735,6 +752,7 @@ resource "kubernetes_deployment" "api" {
         labels = merge(local.common_labels, { role = "api" })
         annotations = {
           "firework.artemnikitin.com/controlplane-deployment-revision" = var.controlplane_deployment_revision
+          "firework.artemnikitin.com/controlplane-config-sha256"       = sha256(local.api_config)
         }
       }
       spec {
@@ -840,6 +858,7 @@ resource "kubernetes_deployment" "all" {
         labels = merge(local.common_labels, { role = "all" })
         annotations = {
           "firework.artemnikitin.com/controlplane-deployment-revision" = var.controlplane_deployment_revision
+          "firework.artemnikitin.com/controlplane-config-sha256"       = sha256(local.all_config)
         }
       }
       spec {
