@@ -205,6 +205,8 @@ locals {
         'leader_renew_interval: "${var.leader_renew_interval}"' \
         'controller_tick: "${var.controller_tick}"' \
         'node_stale_ttl: "${var.node_stale_ttl}"' \
+        'node_down_retention: ${local.node_down_retention_yaml}' \
+        'node_stale_retention: ${local.node_stale_retention_yaml}' \
         'target_branch: "${var.target_branch}"' \
         'config_dir: "${var.config_dir}"' \
         'git_repo_url: "${var.git_repo_url}"' \
@@ -249,6 +251,8 @@ locals {
         'leader_renew_interval: "${var.leader_renew_interval}"' \
         'controller_tick: "${var.controller_tick}"' \
         'node_stale_ttl: "${var.node_stale_ttl}"' \
+        'node_down_retention: ${local.node_down_retention_yaml}' \
+        'node_stale_retention: ${local.node_stale_retention_yaml}' \
         'target_branch: "${var.target_branch}"' \
         'config_dir: "${var.config_dir}"' \
         'git_repo_url: "${var.git_repo_url}"' \
@@ -298,6 +302,10 @@ locals {
         'leader_renew_interval: "${var.leader_renew_interval}"' \
         'controller_tick: "${var.controller_tick}"' \
         'node_stale_ttl: "${var.node_stale_ttl}"' \
+        'node_down_retention: ${local.node_down_retention_yaml}' \
+        'node_stale_retention: ${local.node_stale_retention_yaml}' \
+        'node_retirement_enabled: ${var.node_retirement_enabled}' \
+        'node_retirement_dry_run: ${var.node_retirement_dry_run}' \
         'target_branch: "${var.target_branch}"' \
         'config_dir: "${var.config_dir}"' \
         'git_repo_url: "${var.git_repo_url}"' \
@@ -446,6 +454,10 @@ locals {
         'leader_renew_interval: "${var.leader_renew_interval}"' \
         'controller_tick: "${var.controller_tick}"' \
         'node_stale_ttl: "${var.node_stale_ttl}"' \
+        'node_down_retention: ${local.node_down_retention_yaml}' \
+        'node_stale_retention: ${local.node_stale_retention_yaml}' \
+        'node_retirement_enabled: ${var.node_retirement_enabled}' \
+        'node_retirement_dry_run: ${var.node_retirement_dry_run}' \
         'target_branch: "${var.target_branch}"' \
         'config_dir: "${var.config_dir}"' \
         'git_repo_url: "${var.git_repo_url}"' \

@@ -54,6 +54,8 @@ locals {
         '    endpoint_url: "${var.state_s3_endpoint_url}"' \
         '    force_path_style: ${var.state_s3_force_path_style}' \
         'node_stale_ttl: "${var.node_stale_ttl}"' \
+        'node_down_retention: ${local.node_down_retention_yaml}' \
+        'node_stale_retention: ${local.node_stale_retention_yaml}' \
         'tls:' \
         '  cert_file: "/tmp/firework/tls/controlplane.crt"' \
         '  key_file: "/tmp/firework/tls/controlplane.key"'

@@ -100,6 +100,34 @@ variable "node_stale_ttl" {
   default     = "45s"
 }
 
+variable "node_down_retention" {
+  description = "Time after an explicit down transition before a node can be retired. Use a Go duration greater than node_stale_ttl."
+  type        = string
+  default     = "24h"
+  nullable    = false
+}
+
+variable "node_stale_retention" {
+  description = "Time after the last heartbeat before an unreachable node can be retired. Use a Go duration greater than node_stale_ttl."
+  type        = string
+  default     = "168h"
+  nullable    = false
+}
+
+variable "node_retirement_enabled" {
+  description = "Allow automatic node metadata retirement once dry-run is disabled."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "node_retirement_dry_run" {
+  description = "Log retirement candidates on publishing passes and suppress retirement writes."
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
 variable "events_listen_addr" {
   description = "Listen address for the events role inside the container."
   type        = string

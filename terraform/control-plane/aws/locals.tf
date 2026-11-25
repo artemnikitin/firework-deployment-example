@@ -2,6 +2,10 @@ locals {
   state_prefix_clean = trim(var.state_prefix, "/")
   state_prefix_full  = "${local.state_prefix_clean}/"
 
+  # JSON string scalars are valid YAML. Escape apostrophes for the bootstrap script's single quotes.
+  node_down_retention_yaml  = replace(jsonencode(var.node_down_retention), "'", "\\u0027")
+  node_stale_retention_yaml = replace(jsonencode(var.node_stale_retention), "'", "\\u0027")
+
   events_container_name       = "${var.project_name}-events"
   registry_container_name     = "${var.project_name}-registry"
   controller_container_name   = "${var.project_name}-controller"

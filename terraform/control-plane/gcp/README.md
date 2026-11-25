@@ -133,6 +133,8 @@ Changing `controlplane_deployment_revision` updates an annotation on the
 control-plane pod template. A normal `terraform apply` then rolls the combined
 workload by default, or all four role workloads in split mode. The
 `image_pull_policy = "Always"` setting pulls the current image for the tag.
+Changes to generated control-plane configuration also roll the affected
+workloads so they read the new configuration at startup.
 
 The default combined Deployment requests 1000m CPU and 2Gi memory per replica
 and runs one replica, so any disruption — a node drain, an Autopilot upgrade, an
@@ -145,6 +147,22 @@ Set `controlplane_replicas`,
 split mode, `events_replicas`, `registry_replicas`, `controller_replicas`, and
 `api_replicas` independently scale the four Deployments, which carry no
 disruption budget of their own.
+
+### 6. Node retirement
+
+The [example inputs](terraform.tfvars.example) show the defaults, which keep
+automatic retirement disabled and log candidates on publishing passes. The
+down window starts at the explicit down transition. The stale window starts at
+the last heartbeat. Both use Go duration strings such as `"12h"` or `"1h30m"`
+and must exceed `node_stale_ttl`. Both also limit previous-owner waits while
+automatic retirement is disabled.
+
+Keep automatic retirement disabled while upgrading every control-plane replica
+to a build that supports it, then upgrade the agents. Complete the live checks
+in [Firework issue #33](https://github.com/artemnikitin/firework/issues/33)
+before enabling automatic retirement.
+To enable automatic metadata retirement after those checks, set
+`node_retirement_enabled = true` and `node_retirement_dry_run = false`.
 
 ---
 
