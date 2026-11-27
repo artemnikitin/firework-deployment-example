@@ -52,7 +52,7 @@ variable "firecracker_version" {
 
 variable "traefik_version" {
   type    = string
-  default = "3.3.4"
+  default = "3.8.0"
 }
 
 variable "firework_agent_path" {
