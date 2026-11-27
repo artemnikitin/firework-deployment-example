@@ -3,49 +3,47 @@ set -euo pipefail
 echo "==> Downloading Firecracker-compatible kernel"
 
 ARCH="$(uname -m)"
-KERNEL_PATH="/var/lib/images/vmlinux-5.10"
-S3_URL="https://s3.amazonaws.com/spec.ccfc.min"
-CI_VERSION="v$(echo "${FIRECRACKER_VERSION}" | cut -d. -f1,2)"
-KERNEL_SHA256=""
+IMAGES_DIR="/var/lib/images"
 
-case "${CI_VERSION}" in
-  v1.18)
-    # Pin a dated CI build. Firework and GitOps still use the 5.10 guest kernel path.
-    KERNEL_KEY="firecracker-ci/20261105-6ea6634994fa-0/${ARCH}/vmlinux-5.10.271"
-    case "${ARCH}" in
-      x86_64) KERNEL_SHA256="38d9d7a4096e95df6d236c6372e5b8f8928892503517cb723187c31cc418bc74" ;;
-      aarch64) KERNEL_SHA256="5174656f19dfb09b087e044b1ba149eaac3c83825fcb167179961774e37648c8" ;;
-      *) echo "ERROR: Unsupported kernel architecture: ${ARCH}" >&2; exit 1 ;;
-    esac
-    ;;
-  *)
-    # Older Firecracker overrides can still use the release-specific CI prefixes.
-    KERNEL_PREFIX="firecracker-ci/${CI_VERSION}/${ARCH}/vmlinux-5.10"
-    KERNEL_LIST="$(curl -fsSL "${S3_URL}/?prefix=${KERNEL_PREFIX}&list-type=2")"
-    KERNEL_KEY=$(printf '%s' "${KERNEL_LIST}" \
-      | { grep -oE '<Key>[^<]+/vmlinux-5\.10\.[0-9]+</Key>' || true; } \
-      | sed -e 's|^<Key>||' -e 's|</Key>$||' \
-      | sort -V | tail -1)
-    ;;
-esac
+sudo mkdir -p "$IMAGES_DIR"
+
+# Older releases use a two-part CI prefix such as v1.12.
+CI_VERSION="v$(echo "${FIRECRACKER_VERSION}" | cut -d. -f1,2)"
+
+if [ "${CI_VERSION}" = "v1.18" ]; then
+  # Pin a dated CI artifact and keep the 5.10 kernel expected by Firework.
+  KERNEL_KEY="firecracker-ci/20261105-6ea6634994fa-0/${ARCH}/vmlinux-5.10.271"
+else
+  # Discover the latest 5.10.x kernel available for this CI version.
+  KERNEL_KEY=$(curl -fsSL \
+    "https://s3.amazonaws.com/spec.ccfc.min/?prefix=firecracker-ci/${CI_VERSION}/${ARCH}/vmlinux-5.10&list-type=2" \
+    | grep -oE "firecracker-ci/${CI_VERSION}/${ARCH}/vmlinux-5\\.10\\.[0-9]+" \
+    | sort -V | tail -1)
+fi
 
 if [ -z "${KERNEL_KEY}" ]; then
-  echo "ERROR: Could not find a vmlinux-5.10.x kernel for Firecracker ${CI_VERSION} / ${ARCH}" >&2
+  echo "ERROR: Could not find a vmlinux-5.10.x kernel for Firecracker ${CI_VERSION} / ${ARCH}"
   exit 1
 fi
 
-KERNEL_URL="${S3_URL}/${KERNEL_KEY}"
-download_file=$(mktemp)
-trap 'rm -- "$download_file"' EXIT
+KERNEL_FILENAME=$(basename "${KERNEL_KEY}")
+KERNEL_URL="https://s3.amazonaws.com/spec.ccfc.min/${KERNEL_KEY}"
+
+# Save with the canonical two-part name (e.g. vmlinux-5.10) so the control-plane
+# default kernel path (/var/lib/images/vmlinux-5.10) resolves without a symlink.
+KERNEL_MAJOR_MINOR=$(echo "${KERNEL_FILENAME}" | grep -oE "vmlinux-[0-9]+\.[0-9]+")
+KERNEL_PATH="${IMAGES_DIR}/${KERNEL_MAJOR_MINOR}"
+
 echo "Downloading kernel from: ${KERNEL_URL}"
-curl -fsSL "${KERNEL_URL}" -o "${download_file}"
-if [ ! -s "${download_file}" ]; then
-  echo "ERROR: Kernel download is empty: ${KERNEL_URL}" >&2
-  exit 1
-fi
-if [ -n "${KERNEL_SHA256}" ]; then
-  printf '%s  %s\n' "${KERNEL_SHA256}" "${download_file}" | sha256sum -c -
+sudo curl -fsSL "${KERNEL_URL}" -o "${KERNEL_PATH}"
+sudo chmod 644 "${KERNEL_PATH}"
+
+# Verify the file was downloaded.
+if [ ! -s "${KERNEL_PATH}" ]; then
+  echo "WARNING: Kernel download may have failed. File is empty or missing."
+  echo "You may need to manually place a kernel at ${KERNEL_PATH}"
+else
+  echo "Kernel installed: ${KERNEL_PATH} ($(du -h "${KERNEL_PATH}" | cut -f1))"
 fi
 
-sudo install -D -m 0644 "${download_file}" "${KERNEL_PATH}"
-echo "Kernel installed: ${KERNEL_PATH}"
+echo "==> Kernel download complete"

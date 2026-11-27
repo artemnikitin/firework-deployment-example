@@ -6,20 +6,24 @@ ARCH="$(uname -m)"
 TARBALL="firecracker-v${FIRECRACKER_VERSION}-${ARCH}.tgz"
 URL="https://github.com/firecracker-microvm/firecracker/releases/download/v${FIRECRACKER_VERSION}/${TARBALL}"
 
-download_dir=$(mktemp -d)
-trap 'rm -r -- "$download_dir"' EXIT
-curl -fsSL "${URL}" -o "${download_dir}/${TARBALL}"
-tar -xzf "${download_dir}/${TARBALL}" -C "${download_dir}"
+cd /tmp
+curl -sL "${URL}" -o "${TARBALL}"
+tar -xzf "${TARBALL}"
 
-RELEASE_DIR="${download_dir}/release-v${FIRECRACKER_VERSION}-${ARCH}"
+RELEASE_DIR="release-v${FIRECRACKER_VERSION}-${ARCH}"
 
 # Install firecracker binary.
-sudo install -m 0755 "${RELEASE_DIR}/firecracker-v${FIRECRACKER_VERSION}-${ARCH}" /usr/bin/firecracker
+sudo mv "${RELEASE_DIR}/firecracker-v${FIRECRACKER_VERSION}-${ARCH}" /usr/bin/firecracker
+sudo chmod +x /usr/bin/firecracker
 
 # Install jailer binary (optional, useful for sandboxing VMs).
 if [ -f "${RELEASE_DIR}/jailer-v${FIRECRACKER_VERSION}-${ARCH}" ]; then
-  sudo install -m 0755 "${RELEASE_DIR}/jailer-v${FIRECRACKER_VERSION}-${ARCH}" /usr/bin/jailer
+  sudo mv "${RELEASE_DIR}/jailer-v${FIRECRACKER_VERSION}-${ARCH}" /usr/bin/jailer
+  sudo chmod +x /usr/bin/jailer
 fi
+
+# Clean up.
+rm -rf "${RELEASE_DIR}" "${TARBALL}"
 
 # Verify.
 echo "Firecracker installed:"

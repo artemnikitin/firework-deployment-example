@@ -10,15 +10,15 @@ case "$(uname -m)" in
 esac
 
 echo "==> Downloading Traefik v${TRAEFIK_VERSION} (${ARCH})"
-download_dir=$(mktemp -d)
-trap 'rm -r -- "$download_dir"' EXIT
+TMPDIR=$(mktemp -d)
+trap 'rm -rf "$TMPDIR"' EXIT
 
 curl -fsSL \
   "https://github.com/traefik/traefik/releases/download/v${TRAEFIK_VERSION}/traefik_v${TRAEFIK_VERSION}_linux_${ARCH}.tar.gz" \
-  -o "$download_dir/traefik.tar.gz"
+  -o "$TMPDIR/traefik.tar.gz"
 
-tar -xzf "$download_dir/traefik.tar.gz" -C "$download_dir" traefik
+tar -xzf "$TMPDIR/traefik.tar.gz" -C "$TMPDIR" traefik
 
-sudo install -m 0755 "$download_dir/traefik" /usr/bin/traefik
+sudo install -m 0755 "$TMPDIR/traefik" /usr/bin/traefik
 
 echo "==> Traefik installed: $(traefik version 2>&1 | head -1)"
