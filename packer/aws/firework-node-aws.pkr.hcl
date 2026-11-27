@@ -47,12 +47,12 @@ variable "source_ami_owner" {
 
 variable "firecracker_version" {
   type    = string
-  default = "1.12.0"
+  default = "1.18.0"
 }
 
 variable "traefik_version" {
   type    = string
-  default = "3.3.4"
+  default = "3.8.0"
 }
 
 variable "firework_agent_path" {

@@ -7,15 +7,19 @@ IMAGES_DIR="/var/lib/images"
 
 sudo mkdir -p "$IMAGES_DIR"
 
-# The Firecracker CI S3 bucket uses a two-part version prefix (e.g. v1.12),
-# not the full semver tag (e.g. v1.12.0). Strip the patch component.
+# Older releases use a two-part CI prefix such as v1.12.
 CI_VERSION="v$(echo "${FIRECRACKER_VERSION}" | cut -d. -f1,2)"
 
-# Discover the latest 5.10.x kernel available for this CI version.
-KERNEL_KEY=$(curl -fsSL \
-  "https://s3.amazonaws.com/spec.ccfc.min/?prefix=firecracker-ci/${CI_VERSION}/${ARCH}/vmlinux-5.10&list-type=2" \
-  | grep -oE "firecracker-ci/${CI_VERSION}/${ARCH}/vmlinux-5\\.10\\.[0-9]+" \
-  | sort -V | tail -1)
+if [ "${CI_VERSION}" = "v1.18" ]; then
+  # Pin a dated CI artifact and keep the 5.10 kernel expected by Firework.
+  KERNEL_KEY="firecracker-ci/20261105-6ea6634994fa-0/${ARCH}/vmlinux-5.10.271"
+else
+  # Discover the latest 5.10.x kernel available for this CI version.
+  KERNEL_KEY=$(curl -fsSL \
+    "https://s3.amazonaws.com/spec.ccfc.min/?prefix=firecracker-ci/${CI_VERSION}/${ARCH}/vmlinux-5.10&list-type=2" \
+    | grep -oE "firecracker-ci/${CI_VERSION}/${ARCH}/vmlinux-5\\.10\\.[0-9]+" \
+    | sort -V | tail -1)
+fi
 
 if [ -z "${KERNEL_KEY}" ]; then
   echo "ERROR: Could not find a vmlinux-5.10.x kernel for Firecracker ${CI_VERSION} / ${ARCH}"
