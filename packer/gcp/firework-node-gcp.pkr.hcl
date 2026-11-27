@@ -29,7 +29,7 @@ variable "machine_type" {
 
 variable "firecracker_version" {
   type    = string
-  default = "1.12.0"
+  default = "1.18.0"
 }
 
 variable "traefik_version" {
